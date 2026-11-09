@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sketch Studio — hand-drawn canvas</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+  <script type="module" src="./assets/app.js"></script>
+</head>
+<body class="app">
+  <header class="masthead">
+    <span class="brand">Sketch Studio</span>
+    <span class="tagline">paint shapes, type text, link objects with arrows</span>
+  </header>
+
+  <main class="stage">
+    <aside class="toolbar" aria-label="Tools and styles">
+      <section class="section tools">
+        <h2 class="label">Tools</h2>
+        <div class="grid" role="group" aria-label="Tools">
+          <button class="cell" data-tool="select" aria-pressed="true" title="Select / move">
+            <svg viewBox="0 0 16 16"><path d="M3.5 2.5 12.5 8 8.8 9.1 6.9 13.6Z" /></svg>
+            <kbd>V</kbd>
+          </button>
+          <button class="cell" data-tool="rect" title="Rectangle">
+            <svg viewBox="0 0 16 16"><rect x="3" y="4.5" width="10" height="7" rx="1.2" /></svg>
+            <kbd>R</kbd>
+          </button>
+          <button class="cell" data-tool="ellipse" title="Ellipse">
+            <svg viewBox="0 0 16 16"><ellipse cx="8" cy="8" rx="5.2" ry="4" /></svg>
+            <kbd>O</kbd>
+          </button>
+          <button class="cell" data-tool="diamond" title="Diamond">
+            <svg viewBox="0 0 16 16"><path d="M8 2.6 13.4 8 8 13.4 2.6 8Z" /></svg>
+            <kbd>D</kbd>
+          </button>
+          <button class="cell" data-tool="line" title="Line">
+            <svg viewBox="0 0 16 16"><path d="M3 12.5 13 4" /></svg>
+            <kbd>L</kbd>
+          </button>
+          <button class="cell" data-tool="arrow" title="Arrow — links objects">
+            <svg viewBox="0 0 16 16"><path d="M3 12.5 13 4M13 4 8.6 4.6M13 4 11.6 8.6" /></svg>
+            <kbd>A</kbd>
+          </button>
+          <button class="cell" data-tool="freehand" title="Pen — draw freehand">
+            <svg viewBox="0 0 16 16"><path d="M3.5 12.5 10.8 4.6 12.9 7.2 5.7 14Z" /></svg>
+            <kbd>P</kbd>
+          </button>
+          <button class="cell" data-tool="eraser" title="Eraser">
+            <svg viewBox="0 0 16 16"><path d="M4 11.5 9 4.5 13.2 8.6 8.4 13.5ZM3 14.5H13" /></svg>
+            <kbd>E</kbd>
+          </button>
+          <button class="cell" data-tool="text" title="Text">
+            <svg viewBox="0 0 16 16"><path d="M3.5 4H12.5M8 4V12.6" /></svg>
+            <kbd>T</kbd>
+          </button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="label">Stroke</h2>
+        <div class="grid" id="strokeStyleGrid" role="group" aria-label="Stroke style">
+          <button class="cell" data-style="solid" aria-pressed="true" title="Solid stroke">
+            <svg viewBox="0 0 16 16"><path d="M2.5 8H13.5" /></svg>
+            <span class="hint">solid</span>
+          </button>
+          <button class="cell" data-style="dashed" title="Dashed stroke">
+            <svg viewBox="0 0 16 16"><path d="M2.5 8H6M8.5 8H11M13 8H13.5" /></svg>
+            <span class="hint">dash</span>
+          </button>
+          <button class="cell" data-style="dotted" title="Dotted stroke">
+            <svg viewBox="0 0 16 16"><path d="M3 8H3.4M6.3 8H6.7M9.6 8H10M12.9 8H13.3" /></svg>
+            <span class="hint">dot</span>
+          </button>
+        </div>
+        <label class="slider">
+          <span>Pen size</span>
+          <input class="range" type="range" id="strokeWidth" min="1" max="14" value="2" step="1" />
+        </label>
+      </section>
+
+      <section class="section">
+        <h2 class="label">Ink</h2>
+        <div class="grid" id="colorGrid" role="group" aria-label="Ink colour"></div>
+      </section>
+
+      <section class="section">
+        <h2 class="label">Fill</h2>
+        <div class="grid" id="fillGrid" role="group" aria-label="Fill colour"></div>
+      </section>
+
+      <section class="section">
+        <h2 class="label">Text size</h2>
+        <div class="grid" id="fontSizeGrid" role="group" aria-label="Text size"></div>
+      </section>
+    </aside>
+
+    <aside class="actions" aria-label="Commands">
+      <button class="chip" id="undoBtn" title="Undo">Undo</button>
+      <button class="chip" id="redoBtn" title="Redo">Redo</button>
+      <button class="chip" id="dupBtn" title="Duplicate selection">Duplicate</button>
+      <button class="chip" id="frontBtn" title="Bring selection to front">Front</button>
+      <button class="chip" id="pngBtn" title="Export PNG">PNG</button>
+      <button class="chip" id="jsonBtn" title="Save scene JSON">JSON</button>
+      <button class="chip" id="openBtn" title="Open scene JSON">Open</button>
+      <button class="chip" id="clearBtn" title="Clear canvas">Clear</button>
+    </aside>
+
+    <canvas id="board" class="board" tabindex="0" aria-label="Drawing surface"></canvas>
+
+    <footer class="statusline">
+      <span id="statusTool">Select</span>
+      <span class="dot">·</span>
+      <span id="statusHint">drag to draw &nbsp;·&nbsp; shift = square / straight &nbsp;·&nbsp; arrow ends snap to objects</span>
+    </footer>
+  </main>
+</body>
+</html>
