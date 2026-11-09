@@ -1,17 +1,11 @@
 # Sketch Studio
 
 > ### A toy app, written by a local model
->
-> This is a toy: developed by **`local/qwen3.8-flash-next-coder`** — a Qwen3.8-Flash-Next
-> GGUF at **IQ1_M** quantisation with a speculative draft model — served by **Splash**
-> (`splash serve --offline --host 127.0.0.1`) on a MacBook, driven through the **pi**
-> coding agent plus some of its coding skills at `high` reasoning effort. No cloud
-> model, no API calls, no telemetry: the model and every byte of the drawing stay
-> on the laptop.
->
-> Judge it as "what one small local model built in a sitting", not as software worth
-> shipping. The 59 unit tests are real, the feature set is deliberately shallow, and
-> review beyond running it in a browser is minimal. Pull requests and rewrites are welcome.
+> 
+> This is a toy drawing app built entirely using **`local/qwen3.8-flash-next-coder`** — a Qwen3.8-Flash-Next GGUF at **IQ1_M quantization**, assisted by a speculative draft model.
+> The model runs locally on a MacBook, served by **Splash** (`splash serve --offline --host 127.0.0.1`) and driven through the **pi** coding agent with some of its coding skills at `high` reasoning effort.
+> **No cloud models, no API calls, no telemetry.** Everything runs locally.
+> The goal is to explore **what a heavily quantized local model can build in a single sitting**. The app includes 59 unit tests and a deliberately shallow feature set, with minimal review beyond running it in a browser.
 
 A hand-drawn editor for the browser: paint sketchy shapes, type text, and
 connect objects with arrows that stay attached when you move things around.
