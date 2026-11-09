@@ -13,6 +13,16 @@ connect objects with arrows that stay attached when you move things around.
 No dependencies, no build step, no network calls — everything happens in one
 HTML page and saves to your browser's local storage.
 
+## See it
+
+![Sketch Studio demo](assets/sketch-studio.gif)
+
+Not a mock-up: every frame is the actual rendered canvas, screenshotted after
+one pointer move while headless Chromium clicked tools, dragged shapes, typed
+a label, then dragged the ellipse — and the arrow follows it. Regenerate with
+`python3 tools/make_gif.py`; it needs Playwright and Pillow, which are not
+project dependencies.
+
 ## Run
 
 ```bash
@@ -64,6 +74,7 @@ src/tools.js      draft rects, angle/aspect constraints, palette
 src/rough.js      deterministic sketchy path generation (seeded by element id)
 src/scene.js      element store, history (undo/redo), selection model
 tests/*.test.mjs  unit tests for the DOM-free layers
+tools/make_gif.py regenerates the demo GIF (Playwright + Pillow)
 ```
 
 The `src/` layer has no DOM access, which is what keeps it unit-testable.
