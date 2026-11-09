@@ -2,11 +2,12 @@
 
 > ### A toy app, written by a local model
 >
-> This is a toy, built by a local model: **`local/qwen3.8-flash-next-coder`**
-> — a Qwen3.8-Flash-Next GGUF at **IQ1_M** quantisation, with a speculative draft model
-> — served by **Splash** (`splash serve --offline --host 127.0.0.1`) on a MacBook
-> under the **pi** coding agent at `high` reasoning effort. No cloud model, no API
-> calls, no telemetry: the model and every byte of the drawing stay on the laptop.
+> This is a toy: developed by **`local/qwen3.8-flash-next-coder`** — a Qwen3.8-Flash-Next
+> GGUF at **IQ1_M** quantisation with a speculative draft model — served by **Splash**
+> (`splash serve --offline --host 127.0.0.1`) on a MacBook, driven through the **pi**
+> coding agent plus some of its coding skills at `high` reasoning effort. No cloud
+> model, no API calls, no telemetry: the model and every byte of the drawing stay
+> on the laptop.
 >
 > Judge it as "what one small local model built in a sitting", not as software worth
 > shipping. The 59 unit tests are real, the feature set is deliberately shallow, and
