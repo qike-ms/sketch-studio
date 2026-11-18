@@ -136,6 +136,23 @@ describe('selection controls reflect the current selection', () => {
   });
 });
 
+describe('label sync', () => {
+  it('angle-field edits rotate bound labels with their container', () => {
+    reset([
+      rect('box'),
+      text('label', 'hello', { containerId: 'box', x: 10, y: 40, width: 40, height: 24 }),
+    ]);
+    dom.dispatch(board, 'pointerdown', { clientX: 0, clientY: 50, pointerId: 1, button: 0, shiftKey: false });
+    dom.dispatch(board, 'pointerup', { clientX: 0, clientY: 50, pointerId: 1, button: 0, shiftKey: false });
+    const angle = dom.get('angleInput');
+    angle.value = '30';
+    dom.dispatch(angle, 'change', {});
+    const label = app.scene.elements.find((el) => el.id === 'label');
+    assert.equal(label.angle, 30);
+    assert.equal(app.scene.elements.find((el) => el.id === 'box').angle, 30);
+  });
+});
+
 describe('multi-tab conflict wiring', () => {
   const key = 'sketch-studio:v2';
 

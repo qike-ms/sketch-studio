@@ -1998,6 +1998,7 @@ document.getElementById('angleInput').addEventListener('change', (event) => {
   props.setAngle(scene.elements, selection, Number(event.target.value), {
     isLocked: (el) => edit.isElementLocked(el, find),
   });
+  scene.syncLabels();
   scheduleSave();
   updateProperties();
   safeRender();
