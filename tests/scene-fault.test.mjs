@@ -76,6 +76,56 @@ describe('corrupt history never corrupts the scene', () => {
   });
 });
 
+describe('semantic history validation', () => {
+  it('rejects null entries, unknown types and duplicate ids', () => {
+    for (const bad of [
+      '[null]',
+      '[{"id":"a","type":"triangle","x":0,"y":0,"width":1,"height":1}]',
+      '[{"id":"a","type":"rect","x":0,"y":0,"width":1,"height":1},{"id":"a","type":"rect","x":0,"y":0,"width":1,"height":1}]',
+    ]) {
+      const scene = new Scene();
+      scene.add({ type: 'rect', x: 7, y: 7, width: 10, height: 10 });
+      const before = scene.snapshot();
+      scene.undoStack.push(bad);
+      assert.equal(scene.undo(), false, bad);
+      assert.equal(scene.snapshot(), before);
+      assert.ok(scene.historyIssues.some((item) => item.code === 'corrupt-history'));
+    }
+  });
+
+  it('rejects non-finite numbers and invalid references', () => {
+    for (const bad of [
+      '[{"id":"a","type":"rect","x":null,"y":0,"width":1,"height":1}]',
+      '[{"id":"a","type":"rect","x":0,"y":0,"width":1e999,"height":1}]',
+      '[{"id":"t","type":"text","x":0,"y":0,"width":1,"height":1,"containerId":"missing"}]',
+      '[{"id":"a","type":"arrow","x":0,"y":0,"width":1,"height":1,"points":[{"x":0,"y":0},{"x":1,"y":1}],"startBinding":{"elementId":"a"}}]',
+    ]) {
+      const scene = new Scene();
+      scene.add({ type: 'rect', x: 7, y: 7, width: 10, height: 10 });
+      scene.undoStack.push(bad);
+      assert.equal(scene.undo(), false, bad);
+      assert.equal(scene.elements.length, 1);
+    }
+  });
+
+  it('still accepts a semantically valid snapshot', () => {
+    const scene = new Scene();
+    const id = scene.add({ type: 'rect', x: 0, y: 0, width: 10, height: 10 });
+    scene.pushHistory();
+    scene.add({ type: 'rect', x: 20, y: 20, width: 10, height: 10 });
+    assert.equal(scene.undo(), true);
+    assert.deepEqual(scene.elements.map((el) => el.id), [id]);
+  });
+
+  it('skips a bad redo entry', () => {
+    const scene = new Scene();
+    scene.add({ type: 'rect', x: 0, y: 0, width: 10, height: 10 });
+    scene.redoStack.push('[null]');
+    assert.equal(scene.redo(), false);
+    assert.equal(scene.elements.length, 1);
+  });
+});
+
 describe('binding and group bookkeeping', () => {
   it('bindConnectorEnd can clear a binding with null', () => {
     const scene = new Scene();

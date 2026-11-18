@@ -65,10 +65,79 @@ export function cloneElement(el) {
 
 export const DEFAULT_HISTORY_LIMIT = 100;
 
+const HISTORY_TYPES = new Set([
+  'rect',
+  'ellipse',
+  'diamond',
+  'line',
+  'arrow',
+  'freehand',
+  'text',
+  'image',
+]);
+const HISTORY_CONTAINERS = new Set(['rect', 'ellipse', 'diamond']);
+
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function validHistoryElement(el) {
+  if (!el || typeof el !== 'object' || Array.isArray(el)) return false;
+  if (!HISTORY_TYPES.has(el.type)) return false;
+  if (typeof el.id !== 'string' || !el.id) return false;
+  if (!finiteNumber(el.x) || !finiteNumber(el.y) || !finiteNumber(el.width) || !finiteNumber(el.height)) return false;
+  if (!finiteNumber(el.angle ?? 0)) return false;
+  if (el.points !== null && el.points !== undefined) {
+    if (!Array.isArray(el.points) || !el.points.length) return false;
+    for (const point of el.points) {
+      if (!point || typeof point !== 'object' || !finiteNumber(point.x) || !finiteNumber(point.y)) return false;
+    }
+  }
+  if (el.groupIds !== undefined && (!Array.isArray(el.groupIds) || el.groupIds.some((id) => typeof id !== 'string'))) {
+    return false;
+  }
+  if (el.containerId !== null && el.containerId !== undefined && typeof el.containerId !== 'string') return false;
+  for (const key of ['startBinding', 'endBinding']) {
+    const binding = el[key];
+    if (binding === null || binding === undefined) continue;
+    if (typeof binding !== 'object' || typeof binding.elementId !== 'string') return false;
+  }
+  return true;
+}
+
+/** Semantic validation: a history snapshot must be a usable element array. */
+export function validateHistorySnapshot(elements) {
+  if (!Array.isArray(elements)) return { ok: false, reason: 'not-an-array' };
+  const byId = new Map();
+  for (const el of elements) {
+    if (!validHistoryElement(el)) return { ok: false, reason: 'invalid-element' };
+    if (byId.has(el.id)) return { ok: false, reason: 'duplicate-id' };
+    byId.set(el.id, el);
+  }
+  for (const el of elements) {
+    if (el.containerId) {
+      const target = byId.get(el.containerId);
+      if (!target || target.id === el.id || !HISTORY_CONTAINERS.has(target.type)) {
+        return { ok: false, reason: 'dangling-container' };
+      }
+    }
+    for (const key of ['startBinding', 'endBinding']) {
+      const binding = el[key];
+      if (!binding) continue;
+      const target = byId.get(binding.elementId);
+      if (!target || target.id === el.id || !HISTORY_CONTAINERS.has(target.type)) {
+        return { ok: false, reason: 'dangling-binding' };
+      }
+    }
+  }
+  return { ok: true, reason: null };
+}
+
 function parseSnapshot(raw) {
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : null;
+    if (!Array.isArray(parsed)) return null;
+    return validateHistorySnapshot(parsed).ok ? parsed : null;
   } catch {
     return null;
   }
