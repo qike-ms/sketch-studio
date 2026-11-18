@@ -12,11 +12,13 @@ import {
   hitTest,
   normRect,
   normalizePoints,
+  rectCenter,
   rectOf,
   rectsIntersect,
   rectContainsRect,
   resolveConnector,
   resolveConnectorPath,
+  rotatePoint,
   rotationHandlePosition,
   setConnectorFromAbsolute,
   elementsInRect,
@@ -278,6 +280,57 @@ export function resizeRect(rect, handle, dx, dy, lockAspect = false) {
 
 export function scalePoints(points, ratioX, ratioY) {
   return points.map((point) => ({ x: point.x * ratioX, y: point.y * ratioY }));
+}
+
+const OPPOSITE_HANDLE = Object.freeze({
+  nw: 'se',
+  n: 's',
+  ne: 'sw',
+  e: 'w',
+  se: 'nw',
+  s: 'n',
+  sw: 'ne',
+  w: 'e',
+});
+
+/**
+ * Resize an element in its local frame, then translate it so the opposite
+ * world-space anchor (corner or edge midpoint) stays exactly fixed.
+ * `base` must be the geometry captured when the gesture started.
+ */
+export function resizeRotatedElement(base, handle, start, current, shiftDown = false) {
+  const rect = base.rect ?? { x: 0, y: 0, width: 0, height: 0 };
+  const angle = base.angle ?? 0;
+  const centre = rectCenter(rect);
+  const localStart = angle ? rotatePoint(start, centre, -angle) : start;
+  const localCurrent = angle ? rotatePoint(current, centre, -angle) : current;
+  const next = resizeRect(
+    rect,
+    handle,
+    localCurrent.x - localStart.x,
+    localCurrent.y - localStart.y,
+    shiftDown,
+  );
+  const opposite = OPPOSITE_HANDLE[handle] ?? 'nw';
+  const anchorLocal = handlePosition(rect, opposite);
+  const anchorWorld = angle ? rotatePoint(anchorLocal, centre, angle) : anchorLocal;
+  const nextCentre = rectCenter(next);
+  const nextAnchorLocal = handlePosition(next, opposite);
+  const nextAnchorWorld = angle ? rotatePoint(nextAnchorLocal, nextCentre, angle) : nextAnchorLocal;
+  const dx = anchorWorld.x - nextAnchorWorld.x;
+  const dy = anchorWorld.y - nextAnchorWorld.y;
+  const result = {
+    x: next.x + dx,
+    y: next.y + dy,
+    width: next.width,
+    height: next.height,
+  };
+  if (base.points) {
+    const ratioX = next.width / (rect.width || 1);
+    const ratioY = next.height / (rect.height || 1);
+    result.points = scalePoints(base.points, ratioX, ratioY);
+  }
+  return result;
 }
 
 /** Connector end dragged to a free point: binding drops until it lands on an object. */

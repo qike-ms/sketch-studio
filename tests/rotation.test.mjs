@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import * as geo from '../src/geometry.js';
+import * as tools from '../src/tools.js';
 
 const find = () => null;
 
@@ -126,5 +127,54 @@ describe('multi-point connectors and elbows', () => {
     };
     assert.ok(geo.hitTest(arrow, { x: 50, y: 80 }, find));
     assert.ok(!geo.hitTest(arrow, { x: 50, y: 20 }, find));
+  });
+});
+
+describe('rotated resize keeps the opposite world-space anchor', () => {
+  const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+  const opposite = { nw: 'se', n: 's', ne: 'sw', e: 'w', se: 'nw', s: 'n', sw: 'ne', w: 'e' };
+
+  function worldHandle(rect, angle, handle) {
+    const point = tools.handlePosition(rect, handle);
+    return angle ? geo.rotatePoint(point, geo.rectCenter(rect), angle) : point;
+  }
+
+  function close(a, b, tolerance = 1e-9) {
+    return Math.abs(a.x - b.x) <= tolerance && Math.abs(a.y - b.y) <= tolerance;
+  }
+
+  for (const angle of [0, 30, 90, 135, 180, 270]) {
+    for (const handle of handles) {
+      it(`handle ${handle} at ${angle} degrees`, () => {
+        const baseRect = { x: 10, y: 20, width: 100, height: 40 };
+        const base = { rect: baseRect, angle, points: null };
+        const start = worldHandle(baseRect, angle, handle);
+        const current = { x: start.x + 18, y: start.y + 14 };
+        const beforeAnchor = worldHandle(baseRect, angle, opposite[handle]);
+        const next = tools.resizeRotatedElement(base, handle, start, current, false);
+        assert.ok(next.width >= 1 && next.height >= 1);
+        const afterAnchor = worldHandle(next, angle, opposite[handle]);
+        assert.ok(close(beforeAnchor, afterAnchor), `${JSON.stringify(beforeAnchor)} !== ${JSON.stringify(afterAnchor)}`);
+      });
+    }
+  }
+
+  it('keeps the aspect ratio when shift-resizing a corner', () => {
+    const baseRect = { x: 0, y: 0, width: 100, height: 40 };
+    const base = { rect: baseRect, angle: 90, points: null };
+    const start = worldHandle(baseRect, 90, 'se');
+    const next = tools.resizeRotatedElement(base, 'se', start, { x: start.x + 40, y: start.y + 5 }, true);
+    assert.ok(Math.abs(next.width / next.height - 100 / 40) < 0.01);
+  });
+
+  it('is stable across repeated moves from the same gesture base', () => {
+    const baseRect = { x: 0, y: 0, width: 100, height: 40 };
+    const base = { rect: baseRect, angle: 90, points: null };
+    const start = worldHandle(baseRect, 90, 'se');
+    const anchor = worldHandle(baseRect, 90, 'nw');
+    for (const delta of [10, 30, 60]) {
+      const next = tools.resizeRotatedElement(base, 'se', start, { x: start.x + delta, y: start.y + delta }, false);
+      assert.ok(close(anchor, worldHandle(next, 90, 'nw')));
+    }
   });
 });

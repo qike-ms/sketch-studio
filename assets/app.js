@@ -727,22 +727,18 @@ function onPointerMove(event) {
       case 'resize': {
         const el = find(gesture.id);
         if (!el) return;
-        const centre = geo.elementCenter(el);
-        const localPoint = gesture.angle ? geo.rotatePoint(point, centre, -gesture.angle) : point;
-        const localStart = gesture.angle ? geo.rotatePoint(gesture.start, centre, -gesture.angle) : gesture.start;
-        const next = tools.resizeRect(
-          gesture.rect,
+        const next = tools.resizeRotatedElement(
+          { rect: gesture.rect, angle: gesture.angle, points: gesture.points },
           gesture.handle,
-          localPoint.x - localStart.x,
-          localPoint.y - localStart.y,
+          gesture.start,
+          point,
           event.shiftKey,
         );
-        if (gesture.points) {
-          const ratioX = next.width / (gesture.rect.width || 1);
-          const ratioY = next.height / (gesture.rect.height || 1);
-          el.points = tools.scalePoints(gesture.points, ratioX, ratioY);
-        }
-        Object.assign(el, { x: next.x, y: next.y, width: next.width, height: next.height });
+        el.x = next.x;
+        el.y = next.y;
+        el.width = next.width;
+        el.height = next.height;
+        if (next.points) el.points = next.points;
         break;
       }
       case 'resize-multi': {
