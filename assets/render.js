@@ -334,6 +334,7 @@ export function drawGrid(context, visibleRect, options = {}) {
   const zoom = options.zoom ?? 1;
   let step = options.gridSize ?? 24;
   while (step * zoom < 10) step *= 2;
+  if (!Number.isFinite(step) || step <= 0) return;
   context.save();
   context.fillStyle = theme === 'dark' ? '#2b2b2b' : '#dfe1e6';
   const size = Math.max(1, 1.4 / Math.max(zoom, 0.2));
@@ -341,8 +342,25 @@ export function drawGrid(context, visibleRect, options = {}) {
   const startY = Math.floor(visibleRect.y / step) * step;
   const endX = visibleRect.x + visibleRect.width;
   const endY = visibleRect.y + visibleRect.height;
-  for (let x = startX; x <= endX; x += step) {
-    for (let y = startY; y <= endY; y += step) {
+  if (![startX, startY, endX, endY].every(Number.isFinite)) {
+    context.restore();
+    return;
+  }
+  // Bound the iteration count and stop when floating point precision means
+  // `x += step` no longer advances (very large pan coordinates).
+  const maxDots = Math.max(1, options.maxDots ?? 20000);
+  const columns = Math.min(Math.max(0, Math.floor((endX - startX) / step) + 1), maxDots);
+  const rows = Math.min(Math.max(0, Math.floor((endY - startY) / step) + 1), maxDots);
+  let previousX = null;
+  for (let column = 0; column < columns; column += 1) {
+    const x = startX + column * step;
+    if (column > 0 && x === previousX) break;
+    previousX = x;
+    let previousY = null;
+    for (let row = 0; row < rows; row += 1) {
+      const y = startY + row * step;
+      if (row > 0 && y === previousY) break;
+      previousY = y;
       context.fillRect(x, y, size, size);
     }
   }

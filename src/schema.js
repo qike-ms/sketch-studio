@@ -36,6 +36,7 @@ export const DEFAULT_LIMITS = Object.freeze({
   maxTextLength: 10000,
   maxImageChars: 8 * 1024 * 1024,
   maxIdLength: 128,
+  maxCoordinate: 1e7,
 });
 
 /** Format an arbitrary JSON value for an issue message without coercing it. */
@@ -90,7 +91,6 @@ function coerceNumber(raw, fallback, { min = -Infinity, max = Infinity, integer 
   if (value > max) value = max;
   return { value, repaired: value !== raw };
 }
-
 function coerceBoolean(raw, fallback) {
   if (typeof raw === 'boolean') return { value: raw, repaired: false };
   if (raw === 'true') return { value: true, repaired: true };
@@ -142,10 +142,10 @@ function validatePoints(raw, type, issues, index, limits) {
     issue(issues, 'too-many-points', `point list truncated to ${limits.maxPoints}`, { index });
   }
   for (const point of capped) {
-    const px = coerceNumber(point && point.x, 0).value;
-    const py = coerceNumber(point && point.y, 0).value;
+    const px = coerceNumber(point && point.x, 0, { min: -limits.maxCoordinate, max: limits.maxCoordinate }).value;
+    const py = coerceNumber(point && point.y, 0, { min: -limits.maxCoordinate, max: limits.maxCoordinate }).value;
     if (!point || typeof point !== 'object' || point.x !== px || point.y !== py) {
-      issue(issues, 'bad-point', 'invalid point coordinate replaced with 0', { index });
+      issue(issues, 'bad-point', 'invalid point coordinate repaired', { index });
     }
     points.push({ x: px, y: py });
   }
@@ -158,6 +158,44 @@ function validatePoints(raw, type, issues, index, limits) {
     issue(issues, 'empty-freehand', 'empty freehand stroke repaired', { index });
   }
   return points;
+}
+
+function boundGeometry(el, issues, index, limits) {
+  const max = limits.maxCoordinate;
+  normalizePoints(el);
+  let width = el.width;
+  let height = el.height;
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    el.points = [{ x: 0, y: 0 }];
+    el.width = 0;
+    el.height = 0;
+    issue(issues, 'bad-geometry', 'non-finite derived geometry reset', { index });
+    return;
+  }
+  if (width > max || height > max) {
+    const scale = max / Math.max(width, height);
+    el.points = el.points.map((point) => ({ x: point.x * scale, y: point.y * scale }));
+    normalizePoints(el);
+    issue(issues, 'oversize-geometry', `derived geometry scaled to fit ${max}`, { index });
+    width = el.width;
+    height = el.height;
+  }
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    el.points = [{ x: 0, y: 0 }];
+    el.width = 0;
+    el.height = 0;
+    issue(issues, 'bad-geometry', 'non-finite derived geometry reset', { index });
+    return;
+  }
+  el.x = Math.min(max, Math.max(-max, el.x));
+  el.y = Math.min(max, Math.max(-max, el.y));
+  for (const point of el.points) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      point.x = 0;
+      point.y = 0;
+      issue(issues, 'bad-point', 'non-finite point reset to 0', { index });
+    }
+  }
 }
 
 function validateImage(raw, issues, index, limits) {
@@ -208,21 +246,21 @@ export function validateElement(raw, context = {}) {
   el.type = raw.type;
   el.id = coerceId(raw.id, idFactory(context.idSeed ?? index), issues, 'bad-id').value;
 
-  const x = coerceNumber(raw.x, 0);
-  const y = coerceNumber(raw.y, 0);
+  const x = coerceNumber(raw.x, 0, { min: -limits.maxCoordinate, max: limits.maxCoordinate });
+  const y = coerceNumber(raw.y, 0, { min: -limits.maxCoordinate, max: limits.maxCoordinate });
   el.x = x.value;
   el.y = y.value;
-  if (x.repaired || y.repaired) issue(issues, 'bad-position', 'invalid position repaired', { index });
+  if (x.repaired || y.repaired) issue(issues, 'bad-position', 'invalid or out-of-range position repaired', { index });
 
   // Negative sizes are almost always a bad import, never a deliberate drawing.
-  let width = coerceNumber(raw.width, 0, { min: 0, max: 1e7 }).value;
-  let height = coerceNumber(raw.height, 0, { min: 0, max: 1e7 }).value;
+  let width = coerceNumber(raw.width, 0, { min: 0, max: limits.maxCoordinate }).value;
+  let height = coerceNumber(raw.height, 0, { min: 0, max: limits.maxCoordinate }).value;
   if (typeof raw.width === 'number' && Number.isFinite(raw.width) && raw.width < 0) {
-    width = Math.abs(raw.width);
+    width = Math.min(Math.abs(raw.width), limits.maxCoordinate);
     issue(issues, 'negative-size', 'negative width flipped to positive', { index });
   }
   if (typeof raw.height === 'number' && Number.isFinite(raw.height) && raw.height < 0) {
-    height = Math.abs(raw.height);
+    height = Math.min(Math.abs(raw.height), limits.maxCoordinate);
     issue(issues, 'negative-size', 'negative height flipped to positive', { index });
   }
   if (!Number.isFinite(width) || !Number.isFinite(height)) {
@@ -268,7 +306,7 @@ export function validateElement(raw, context = {}) {
 
   el.points = validatePoints(raw.points, el.type, issues, index, limits);
   if (el.points) {
-    normalizePoints(el);
+    boundGeometry(el, issues, index, limits);
   }
 
   el.containerId =
