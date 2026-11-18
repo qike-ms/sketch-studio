@@ -8,19 +8,24 @@ an afterthought: a drawing must survive bad input, bad saves and bad tabs.
 Status legend: **done** = shipped on `excalidraw-parity`; **partial** = present
 but narrower than Excalidraw; **missing** = not implemented.
 
+> Review note: the first draft of this roadmap marked every target as done before
+> the implementation existed. This revision restores the honest baseline
+> (everything in P0–P4 is missing except where noted) and is the plan this
+> branch now implements, in priority order.
+
 ## 1. Gap analysis
 
 ### 1.1 Canvas and viewport
 
 | Capability | Excalidraw | Sketch Studio before | Status |
 | --- | --- | --- | --- |
-| Infinite canvas | yes | fixed viewport, no pan | done |
-| Pan: space+drag, middle mouse, wheel, trackpad | yes | missing | done |
-| Zoom: ctrl/⌘+wheel, pinch, buttons, reset | yes | missing | done |
-| Zoom indicator | yes | missing | done |
-| Zoom to fit / zoom to selection | yes | missing | done |
-| Grid toggle + snap to grid | yes | decorative dots, always on | done |
-| Dark mode / theme toggle | yes | light only | done |
+| Infinite canvas | yes | fixed viewport, no pan | missing |
+| Pan: space+drag, middle mouse, wheel, trackpad | yes | missing | missing |
+| Zoom: ctrl/⌘+wheel, pinch, buttons, reset | yes | missing | missing |
+| Zoom indicator | yes | missing | missing |
+| Zoom to fit / zoom to selection | yes | missing | missing |
+| Grid toggle + snap to grid | yes | decorative dots, always on | missing |
+| Dark mode / theme toggle | yes | light only | missing |
 
 ### 1.2 Editing and selection
 
@@ -28,16 +33,16 @@ but narrower than Excalidraw; **missing** = not implemented.
 | --- | --- | --- | --- |
 | Click / shift-click / marquee | yes | yes | done |
 | Multi-element resize | yes | one element at a time | partial |
-| Copy / cut / paste (in-app + system clipboard JSON) | yes | duplicate only | done |
-| Group / ungroup | yes | missing | done |
-| Lock / unlock | yes | missing | done |
-| Align (6 edges) and distribute | yes | missing | done |
-| Z-order: front/back/forward/backward | front only | front only | done |
-| Rotation handle | yes | missing | done |
-| Arrow-key nudge | yes | missing | done |
+| Copy / cut / paste (in-app + system clipboard JSON) | yes | duplicate only | missing |
+| Group / ungroup | yes | missing | missing |
+| Lock / unlock | yes | missing | missing |
+| Align (6 edges) and distribute | yes | missing | missing |
+| Z-order: front/back/forward/backward | front only | front only | partial |
+| Rotation handle | yes | missing | missing |
+| Arrow-key nudge | yes | missing | missing |
 | Select all | yes | yes | done |
 | Delete / duplicate | yes | yes | done |
-| Context menu | yes | missing | done |
+| Context menu | yes | missing | missing |
 
 ### 1.3 Elements and styling
 
@@ -47,14 +52,14 @@ but narrower than Excalidraw; **missing** = not implemented.
 | Line / arrow | yes | yes | done |
 | Freehand | yes | yes | done |
 | Text | yes | yes | done |
-| Double-click shape to edit its label | yes | click Text tool, then type | done |
-| Arrowheads per end (none/arrow/triangle/dot) | yes | arrow only, one style | done |
-| Multi-point lines/arrows, elbow routing | yes | two points, straight | done |
-| Opacity | yes | stored but no UI | done |
-| Roughness (architect/artist/cartoonist) | yes | one fixed style | done |
-| Edge style (sharp/round) | yes | sharp only | done |
-| Font family | yes | one hand font | done |
-| Images (paste/drop, data URL) | yes | missing | done |
+| Double-click shape to edit its label | yes | click Text tool, then type | missing |
+| Arrowheads per end (none/arrow/triangle/dot) | yes | arrow only, one style | missing |
+| Multi-point lines/arrows, elbow routing | yes | two points, straight | missing |
+| Opacity | yes | stored but no UI | partial |
+| Roughness (architect/artist/cartoonist) | yes | one fixed style | partial |
+| Edge style (sharp/round) | yes | sharp only | partial |
+| Font family | yes | one hand font | missing |
+| Images (paste/drop, data URL) | yes | missing | missing |
 | Bindings arrows → shapes | yes | yes | done |
 | Labels bound to containers | yes | yes | done |
 
@@ -62,29 +67,29 @@ but narrower than Excalidraw; **missing** = not implemented.
 
 | Capability | Excalidraw | Sketch Studio before | Status |
 | --- | --- | --- | --- |
-| PNG export | yes | whole scene | done (whole or selection) |
-| SVG export | yes | missing | done |
-| Export selection only | yes | missing | done |
+| PNG export | yes | whole scene | partial |
+| SVG export | yes | missing | missing |
+| Export selection only | yes | missing | missing |
 | JSON save / open | yes | yes, no validation | done |
-| Schema version + migrations | yes | version field, no migrations | done |
-| Validate/repair on load | yes | none | done |
-| Debounced atomic autosave | yes | every pointer-up, single slot | done |
-| Snapshot ring / corrupt-save recovery | partial | none | done |
-| QuotaExceeded handling | yes | none | done |
-| Storage unavailable (private mode) | yes | crash on save | done |
-| Multi-tab edit detection | yes (collab) | none | done |
-| Bounded undo history | yes | 100 entries, no guard | done |
-| Error boundary + recovery export | partial | console.warn only | done |
-| Import guards (size, count, parse, XSS) | yes | none | done |
+| Schema version + migrations | yes | version field, no migrations | partial |
+| Validate/repair on load | yes | none | missing |
+| Debounced atomic autosave | yes | every pointer-up, single slot | missing |
+| Snapshot ring / corrupt-save recovery | partial | none | missing |
+| QuotaExceeded handling | yes | none | missing |
+| Storage unavailable (private mode) | yes | crash on save | missing |
+| Multi-tab edit detection | yes (collab) | none | missing |
+| Bounded undo history | yes | 100 entries, no guard | partial |
+| Error boundary + recovery export | partial | console.warn only | partial |
+| Import guards (size, count, parse, XSS) | yes | none | missing |
 
 ### 1.5 UX
 
 | Capability | Excalidraw | Sketch Studio before | Status |
 | --- | --- | --- | --- |
-| Properties panel reflecting selection | yes | static toolbar | done |
-| Keyboard shortcut help (`?`) | yes | missing | done |
-| Context menu | yes | missing | done |
-| Toasts / non-blocking errors | yes | missing | done |
+| Properties panel reflecting selection | yes | static toolbar | missing |
+| Keyboard shortcut help (`?`) | yes | missing | missing |
+| Context menu | yes | missing | missing |
+| Toasts / non-blocking errors | yes | missing | missing |
 | Command palette | yes | missing | out of scope |
 | Collaboration / libraries / frames | yes | missing | out of scope |
 
