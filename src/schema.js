@@ -33,6 +33,7 @@ export const STROKE_STYLES = Object.freeze(['solid', 'dashed', 'dotted']);
 export const DEFAULT_LIMITS = Object.freeze({
   maxElements: 5000,
   maxPoints: 10000,
+  maxScenePoints: 100000,
   maxTextLength: 10000,
   maxSceneTextChars: 1000000,
   maxImageChars: 8 * 1024 * 1024,
@@ -372,8 +373,10 @@ function migrateV1ToV2(element) {
 /**
  * Run migrations up to SCHEMA_VERSION. Input may be a bare element array
  * (the oldest save format), {version, elements}, or a corrupt value.
+ * Element arrays are capped before migration so hostile data cannot make the
+ * migration pass allocate an unbounded result.
  */
-export function migrateScene(input, issues = []) {
+export function migrateScene(input, issues = [], limits = DEFAULT_LIMITS) {
   let data = input;
   if (Array.isArray(data)) data = { version: 1, elements: data };
   if (!data || typeof data !== 'object') {
@@ -385,12 +388,19 @@ export function migrateScene(input, issues = []) {
     issue(issues, 'no-elements', 'scene has no elements array', { severity: 'error' });
     return null;
   }
+  const totalElements = data.elements.length;
+  let elements = data.elements;
+  if (elements.length > limits.maxElements) {
+    issue(issues, 'too-many-elements', `scene truncated to ${limits.maxElements} elements`, {
+      severity: 'error',
+    });
+    elements = elements.slice(0, limits.maxElements);
+  }
   if (declared > SCHEMA_VERSION) {
     issue(issues, 'newer-schema', `scene version ${declared} is newer than ${SCHEMA_VERSION}; attempting repair`);
-    return { ...data, version: SCHEMA_VERSION, elements: data.elements };
+    return { ...data, version: SCHEMA_VERSION, elements, totalElements };
   }
   let version = Math.max(1, Math.floor(declared));
-  let elements = data.elements;
   while (version < SCHEMA_VERSION) {
     const migration = MIGRATIONS[version];
     if (!migration) {
@@ -400,7 +410,7 @@ export function migrateScene(input, issues = []) {
     elements = elements.map((element) => migration(element));
     version += 1;
   }
-  return { ...data, version, elements };
+  return { ...data, version, elements, totalElements };
 }
 
 /** Validate the app-state style blob; never let it crash the editor. */
@@ -497,11 +507,12 @@ function dedupeIds(elements, issues, idFactory) {
 export function validateScene(input, options = {}) {
   const issues = [];
   const limits = { ...DEFAULT_LIMITS, ...(options.limits ?? {}) };
-  const migrated = migrateScene(input, issues);
+  const migrated = migrateScene(input, issues, limits);
   if (!migrated) {
     return { ok: false, scene: null, issues, stats: { total: 0, kept: 0, dropped: 0, repaired: 0 } };
   }
   const rawElements = migrated.elements;
+  const totalElements = migrated.totalElements ?? rawElements.length;
   let sceneTextChars = 0;
   for (const raw of rawElements) {
     if (raw && typeof raw === 'object' && typeof raw.text === 'string') sceneTextChars += raw.text.length;
@@ -513,21 +524,30 @@ export function validateScene(input, options = {}) {
       `scene contains ${sceneTextChars} text characters; limit is ${limits.maxSceneTextChars}`,
       { severity: 'error', length: sceneTextChars, limit: limits.maxSceneTextChars },
     );
-    return { ok: false, scene: null, issues, stats: { total: rawElements.length, kept: 0, dropped: 0, repaired: 0 } };
-  }
-  if (rawElements.length > limits.maxElements) {
-    issue(issues, 'too-many-elements', `scene truncated to ${limits.maxElements} elements`, {
-      severity: 'error',
-    });
+    return { ok: false, scene: null, issues, stats: { total: totalElements, kept: 0, dropped: 0, repaired: 0 } };
   }
   const elements = [];
   let dropped = 0;
+  let remainingPoints = limits.maxScenePoints;
   const idFactory = options.idFactory ?? ((n) => `el_repair_${n.toString(36)}`);
   for (let index = 0; index < Math.min(rawElements.length, limits.maxElements); index += 1) {
     try {
-      const { element, issues: elementIssues } = validateElement(rawElements[index], {
+      const raw = rawElements[index];
+      let elementLimits = limits;
+      if (raw && typeof raw === 'object' && Array.isArray(raw.points)) {
+        const allowed = Math.max(0, Math.min(limits.maxPoints, remainingPoints));
+        remainingPoints = Math.max(0, remainingPoints - Math.min(raw.points.length, allowed));
+        if (raw.points.length > allowed) {
+          issue(issues, 'scene-point-budget', `point budget reached; element ${index} points capped at ${allowed}`, {
+            index,
+            severity: 'warning',
+          });
+        }
+        elementLimits = { ...limits, maxPoints: allowed };
+      }
+      const { element, issues: elementIssues } = validateElement(raw, {
         index,
-        limits,
+        limits: elementLimits,
         idFactory,
         idSeed: index,
       });
@@ -567,7 +587,7 @@ export function validateScene(input, options = {}) {
     ok: true,
     scene,
     issues,
-    stats: { total: rawElements.length, kept: elements.length, dropped, repaired },
+    stats: { total: totalElements, kept: elements.length, dropped, repaired },
   };
 }
 

@@ -7,6 +7,7 @@
  */
 import { SCHEMA_VERSION } from './scene.js';
 import { validateScene } from './schema.js';
+import { IMPORT_LIMITS, byteLength } from './import.js';
 
 export const CLIPBOARD_TYPE = 'sketch-studio/clipboard';
 
@@ -24,8 +25,12 @@ export function serializeClipboard(payload) {
   return JSON.stringify(payload);
 }
 
-export function parseClipboardPayload(text) {
+export function parseClipboardPayload(text, options = {}) {
   if (typeof text !== 'string' || !text.trim()) return null;
+  const limits = { ...IMPORT_LIMITS, ...(options.limits ?? {}) };
+  // Same bounded front door as files: reject before JSON.parse/validation.
+  if (text.length > limits.maxTextChars) return null;
+  if (byteLength(text) > limits.maxBytes) return null;
   let data;
   try {
     data = JSON.parse(text);
@@ -36,7 +41,7 @@ export function parseClipboardPayload(text) {
   if (data.type !== CLIPBOARD_TYPE && !Array.isArray(data.elements)) return null;
   let result;
   try {
-    result = validateScene({ version: data.version, elements: data.elements });
+    result = validateScene({ version: data.version, elements: data.elements }, { limits });
   } catch {
     return null;
   }

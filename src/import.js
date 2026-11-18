@@ -143,6 +143,8 @@ export function checkFile(file, options = {}) {
 /** Parse a pasted clipboard payload. Returns null when it is not our format. */
 export function parseClipboardText(text, options = {}) {
   if (typeof text !== 'string' || !text.trim()) return null;
+  const limits = { ...IMPORT_LIMITS, ...(options.limits ?? {}) };
+  if (text.length > limits.maxTextChars || byteLength(text) > limits.maxBytes) return null;
   let data;
   try {
     data = JSON.parse(text);
@@ -151,7 +153,12 @@ export function parseClipboardText(text, options = {}) {
   }
   if (!data || typeof data !== 'object') return null;
   if (data.type !== 'sketch-studio/clipboard' && !Array.isArray(data.elements)) return null;
-  const result = validateScene({ version: data.version, elements: data.elements }, options);
+  let result;
+  try {
+    result = validateScene({ version: data.version, elements: data.elements }, { limits });
+  } catch {
+    return null;
+  }
   if (!result.ok) return null;
   return { scene: result.scene, issues: result.issues, stats: result.stats };
 }
