@@ -11,6 +11,7 @@
   <header class="masthead">
     <span class="brand">Sketch Studio</span>
     <span class="tagline">paint shapes, type text, link objects with arrows</span>
+    <span class="save-status" id="saveStatus" aria-live="polite"></span>
   </header>
 
   <main class="stage">
@@ -18,39 +19,39 @@
       <section class="section tools">
         <h2 class="label">Tools</h2>
         <div class="grid" role="group" aria-label="Tools">
-          <button class="cell" data-tool="select" aria-pressed="true" title="Select / move">
+          <button class="cell" data-tool="select" aria-pressed="true" title="Select / move (V)">
             <svg viewBox="0 0 16 16"><path d="M3.5 2.5 12.5 8 8.8 9.1 6.9 13.6Z" /></svg>
             <kbd>V</kbd>
           </button>
-          <button class="cell" data-tool="rect" title="Rectangle">
+          <button class="cell" data-tool="rect" title="Rectangle (R)">
             <svg viewBox="0 0 16 16"><rect x="3" y="4.5" width="10" height="7" rx="1.2" /></svg>
             <kbd>R</kbd>
           </button>
-          <button class="cell" data-tool="ellipse" title="Ellipse">
+          <button class="cell" data-tool="ellipse" title="Ellipse (O)">
             <svg viewBox="0 0 16 16"><ellipse cx="8" cy="8" rx="5.2" ry="4" /></svg>
             <kbd>O</kbd>
           </button>
-          <button class="cell" data-tool="diamond" title="Diamond">
+          <button class="cell" data-tool="diamond" title="Diamond (D)">
             <svg viewBox="0 0 16 16"><path d="M8 2.6 13.4 8 8 13.4 2.6 8Z" /></svg>
             <kbd>D</kbd>
           </button>
-          <button class="cell" data-tool="line" title="Line">
+          <button class="cell" data-tool="line" title="Line (L)">
             <svg viewBox="0 0 16 16"><path d="M3 12.5 13 4" /></svg>
             <kbd>L</kbd>
           </button>
-          <button class="cell" data-tool="arrow" title="Arrow — links objects">
+          <button class="cell" data-tool="arrow" title="Arrow — links objects (A)">
             <svg viewBox="0 0 16 16"><path d="M3 12.5 13 4M13 4 8.6 4.6M13 4 11.6 8.6" /></svg>
             <kbd>A</kbd>
           </button>
-          <button class="cell" data-tool="freehand" title="Pen — draw freehand">
+          <button class="cell" data-tool="freehand" title="Pen — draw freehand (P)">
             <svg viewBox="0 0 16 16"><path d="M3.5 12.5 10.8 4.6 12.9 7.2 5.7 14Z" /></svg>
             <kbd>P</kbd>
           </button>
-          <button class="cell" data-tool="eraser" title="Eraser">
+          <button class="cell" data-tool="eraser" title="Eraser (E)">
             <svg viewBox="0 0 16 16"><path d="M4 11.5 9 4.5 13.2 8.6 8.4 13.5ZM3 14.5H13" /></svg>
             <kbd>E</kbd>
           </button>
-          <button class="cell" data-tool="text" title="Text">
+          <button class="cell" data-tool="text" title="Text (T)">
             <svg viewBox="0 0 16 16"><path d="M3.5 4H12.5M8 4V12.6" /></svg>
             <kbd>T</kbd>
           </button>
@@ -77,6 +78,59 @@
           <span>Pen size</span>
           <input class="range" type="range" id="strokeWidth" min="1" max="14" value="2" step="1" />
         </label>
+        <label class="slider">
+          <span>Opacity</span>
+          <input class="range" type="range" id="opacityRange" min="0" max="100" value="100" step="1" />
+        </label>
+        <label class="slider">
+          <span>Roughness</span>
+          <select id="roughnessSelect" class="select">
+            <option value="0">Architect</option>
+            <option value="1" selected>Artist</option>
+            <option value="2">Cartoonist</option>
+          </select>
+        </label>
+        <label class="slider">
+          <span>Edge</span>
+          <select id="edgeStyleSelect" class="select">
+            <option value="sharp" selected>Sharp</option>
+            <option value="round">Round</option>
+          </select>
+        </label>
+        <label class="slider">
+          <span>Font</span>
+          <select id="fontFamilySelect" class="select">
+            <option value="hand" selected>Hand</option>
+            <option value="normal">Normal</option>
+            <option value="mono">Mono</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="section">
+        <h2 class="label">Arrow</h2>
+        <label class="slider">
+          <span>Start</span>
+          <select id="startArrowheadSelect" class="select">
+            <option value="none" selected>None</option>
+            <option value="arrow">Arrow</option>
+            <option value="triangle">Triangle</option>
+            <option value="dot">Dot</option>
+          </select>
+        </label>
+        <label class="slider">
+          <span>End</span>
+          <select id="endArrowheadSelect" class="select">
+            <option value="none">None</option>
+            <option value="arrow" selected>Arrow</option>
+            <option value="triangle">Triangle</option>
+            <option value="dot">Dot</option>
+          </select>
+        </label>
+        <label class="slider checkbox">
+          <span>Elbow</span>
+          <input type="checkbox" id="elbowToggle" />
+        </label>
       </section>
 
       <section class="section">
@@ -96,23 +150,129 @@
     </aside>
 
     <aside class="actions" aria-label="Commands">
-      <button class="chip" id="undoBtn" title="Undo">Undo</button>
-      <button class="chip" id="redoBtn" title="Redo">Redo</button>
-      <button class="chip" id="dupBtn" title="Duplicate selection">Duplicate</button>
-      <button class="chip" id="frontBtn" title="Bring selection to front">Front</button>
+      <button class="chip" id="undoBtn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+      <button class="chip" id="redoBtn" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+      <button class="chip" id="dupBtn" title="Duplicate selection (Ctrl/Cmd+D)">Duplicate</button>
       <button class="chip" id="pngBtn" title="Export PNG">PNG</button>
+      <button class="chip" id="svgBtn" title="Export SVG">SVG</button>
       <button class="chip" id="jsonBtn" title="Save scene JSON">JSON</button>
       <button class="chip" id="openBtn" title="Open scene JSON">Open</button>
       <button class="chip" id="clearBtn" title="Clear canvas">Clear</button>
+      <button class="chip" id="themeBtn" title="Toggle dark mode">Dark</button>
+      <button class="chip" id="gridBtn" title="Toggle grid (G)">Grid</button>
+      <button class="chip" id="snapBtn" title="Toggle snap to grid (S)">Snap</button>
+      <button class="chip" id="fitBtn" title="Zoom to fit (Ctrl/Cmd+1)">Fit</button>
+      <button class="chip" id="helpBtn" title="Keyboard shortcuts (?)">?</button>
+      <button class="chip" id="recoveryBtn" title="Export recovery JSON">Recovery</button>
+    </aside>
+
+    <aside class="properties" id="propertiesPanel" aria-label="Selection properties">
+      <h2 class="label">Selection</h2>
+      <div class="selection-summary" id="selectionSummary">Nothing selected</div>
+
+      <div class="prop-row">
+        <label class="prop-label" for="angleInput">Angle</label>
+        <input class="number" type="number" id="angleInput" min="0" max="359" step="1" value="0" />
+        <button class="chip small" id="lockBtn" title="Lock / unlock selection (Ctrl/Cmd+Shift+L)">Lock</button>
+      </div>
+
+      <div class="prop-row">
+        <button class="chip small" id="groupBtn" title="Group (Ctrl/Cmd+G)">Group</button>
+        <button class="chip small" id="ungroupBtn" title="Ungroup (Ctrl/Cmd+Shift+G)">Ungroup</button>
+      </div>
+
+      <h2 class="label">Align</h2>
+      <div class="grid buttons" role="group" aria-label="Align">
+        <button class="chip small" data-align="left" title="Align left">⇤</button>
+        <button class="chip small" data-align="centerX" title="Align centre">↔</button>
+        <button class="chip small" data-align="right" title="Align right">⇥</button>
+        <button class="chip small" data-align="top" title="Align top">⇧</button>
+        <button class="chip small" data-align="centerY" title="Align middle">↕</button>
+        <button class="chip small" data-align="bottom" title="Align bottom">⇩</button>
+      </div>
+
+      <h2 class="label">Distribute</h2>
+      <div class="grid buttons" role="group" aria-label="Distribute">
+        <button class="chip small" data-distribute="x" title="Distribute horizontally">Horizontal</button>
+        <button class="chip small" data-distribute="y" title="Distribute vertically">Vertical</button>
+      </div>
+
+      <h2 class="label">Order</h2>
+      <div class="grid buttons" role="group" aria-label="Z-order">
+        <button class="chip small" data-zorder="back" title="Send to back">Back</button>
+        <button class="chip small" data-zorder="backward" title="Send backward">−1</button>
+        <button class="chip small" data-zorder="forward" title="Bring forward">+1</button>
+        <button class="chip small" data-zorder="front" title="Bring to front">Front</button>
+      </div>
+
+      <h2 class="label">Edit</h2>
+      <div class="grid buttons" role="group" aria-label="Edit selection">
+        <button class="chip small" id="copyBtn" title="Copy (Ctrl/Cmd+C)">Copy</button>
+        <button class="chip small" id="cutBtn" title="Cut (Ctrl/Cmd+X)">Cut</button>
+        <button class="chip small" id="pasteBtn" title="Paste (Ctrl/Cmd+V)">Paste</button>
+        <button class="chip small" id="deleteBtn" title="Delete selection">Delete</button>
+      </div>
     </aside>
 
     <canvas id="board" class="board" tabindex="0" aria-label="Drawing surface"></canvas>
+
+    <div class="zoom-controls" aria-label="Zoom">
+      <button class="chip small" id="zoomOutBtn" title="Zoom out">−</button>
+      <button class="chip small" id="zoomIndicator" title="Reset zoom">100%</button>
+      <button class="chip small" id="zoomInBtn" title="Zoom in">+</button>
+      <button class="chip small" id="zoomFitBtn" title="Zoom to fit">Fit</button>
+    </div>
 
     <footer class="statusline">
       <span id="statusTool">Select</span>
       <span class="dot">·</span>
       <span id="statusHint">drag to draw &nbsp;·&nbsp; shift = square / straight &nbsp;·&nbsp; arrow ends snap to objects</span>
     </footer>
+
+    <div class="context-menu" id="contextMenu" role="menu" hidden></div>
+
+    <div class="help-overlay" id="helpOverlay" hidden>
+      <div class="help-card" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+        <header class="help-head">
+          <h2 id="helpTitle">Keyboard shortcuts</h2>
+          <button class="chip small" id="helpCloseBtn" title="Close">Close</button>
+        </header>
+        <div class="help-grid">
+          <section>
+            <h3>Tools</h3>
+            <p><kbd>V</kbd> Select <kbd>R</kbd> Rect <kbd>O</kbd> Ellipse <kbd>D</kbd> Diamond</p>
+            <p><kbd>L</kbd> Line <kbd>A</kbd> Arrow <kbd>P</kbd> Pen <kbd>E</kbd> Eraser <kbd>T</kbd> Text</p>
+          </section>
+          <section>
+            <h3>Canvas</h3>
+            <p><kbd>Space</kbd>+drag or middle mouse: pan</p>
+            <p><kbd>Ctrl/Cmd</kbd>+wheel or pinch: zoom</p>
+            <p><kbd>Ctrl/Cmd</kbd>+<kbd>1</kbd> fit · <kbd>Ctrl/Cmd</kbd>+<kbd>0</kbd> reset zoom</p>
+            <p><kbd>G</kbd> grid · <kbd>S</kbd> snap</p>
+          </section>
+          <section>
+            <h3>Editing</h3>
+            <p><kbd>Ctrl/Cmd</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redo</p>
+            <p><kbd>Ctrl/Cmd</kbd>+<kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> copy / cut / paste</p>
+            <p><kbd>Ctrl/Cmd</kbd>+<kbd>D</kbd> duplicate · <kbd>Ctrl/Cmd</kbd>+<kbd>A</kbd> select all</p>
+            <p><kbd>Ctrl/Cmd</kbd>+<kbd>G</kbd> group · <kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> ungroup</p>
+            <p><kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> lock</p>
+            <p>Arrow keys nudge · <kbd>Shift</kbd>+arrow 10×</p>
+            <p><kbd>Delete</kbd> remove · <kbd>Esc</kbd> deselect</p>
+          </section>
+          <section>
+            <h3>Elements</h3>
+            <p>Double-click a shape to edit its label.</p>
+            <p>Double-click an arrow to add a bend point.</p>
+            <p>Right-click the canvas for the context menu.</p>
+            <p>Paste or drop a PNG/JPEG/GIF/WebP to insert it.</p>
+            <p><kbd>?</kbd> opens this help.</p>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
   </main>
 </body>
 </html>

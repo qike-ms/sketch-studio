@@ -92,6 +92,15 @@ export function createPersistence(options = {}) {
       unavailableReason = 'no storage';
       return false;
     }
+    // Reads must work even when the quota is full: an existing drawing is
+    // still recoverable. Only a read failure means storage is truly unusable.
+    try {
+      storage.getItem(keys.probe);
+    } catch (error) {
+      status = 'unavailable';
+      unavailableReason = error.message ?? 'storage unavailable';
+      return false;
+    }
     try {
       storage.setItem(keys.probe, '1');
       storage.removeItem(keys.probe);
@@ -102,10 +111,10 @@ export function createPersistence(options = {}) {
       if (isQuotaError(error)) {
         status = 'quota';
         unavailableReason = 'storage quota exceeded';
-      } else {
-        status = 'unavailable';
-        unavailableReason = error.message ?? 'storage unavailable';
+        return true;
       }
+      status = 'unavailable';
+      unavailableReason = error.message ?? 'storage unavailable';
       return false;
     }
   }

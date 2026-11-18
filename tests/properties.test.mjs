@@ -9,7 +9,7 @@ function rect(id, extra = {}) {
     strokeColor: '#111', backgroundColor: 'transparent', strokeWidth: 2,
     strokeStyle: 'solid', opacity: 100, roughness: 1, edgeStyle: 'sharp',
     fontFamily: 'hand', fontSize: 24, startArrowhead: 'none', endArrowhead: 'none',
-    angle: 0, groupIds: [], locked: false, ...extra,
+    elbow: false, angle: 0, groupIds: [], locked: false, ...extra,
   };
 }
 
@@ -51,6 +51,8 @@ describe('style patches', () => {
     assert.equal(elements[0].strokeStyle, 'solid');
     assert.equal(elements[0].unknown, undefined);
     assert.equal(elements[1].strokeColor, '#111', 'locked element untouched');
+    assert.deepEqual(props.applyStyle(elements, ['a'], { elbow: true }), ['a']);
+    assert.equal(elements[0].elbow, true);
   });
 
   it('sets a normalised angle', () => {

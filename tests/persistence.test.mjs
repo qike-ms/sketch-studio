@@ -261,3 +261,21 @@ describe('multi-tab safety', () => {
     assert.equal(store.getItem(p.keys.ring), null);
   });
 });
+
+describe('quota still allows recovery reads', () => {
+  it('loads an existing scene even when the quota blocks writes', () => {
+    const raw = JSON.stringify({
+      version: 2,
+      elements: [{ id: 'a', type: 'rect', width: 10, height: 10 }],
+    });
+    const store = quotaStorage(40, { 'sketch-studio:v2': raw });
+    const p = persistence.createPersistence({ storage: store });
+    const loaded = p.load();
+    assert.equal(loaded.ok, true);
+    assert.equal(loaded.scene.elements.length, 1);
+    assert.equal(p.status().status, 'quota');
+    const saved = p.save(sceneData(1));
+    assert.equal(saved.ok, false);
+    assert.equal(saved.quota, true);
+  });
+});

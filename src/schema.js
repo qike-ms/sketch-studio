@@ -366,6 +366,7 @@ export function validateStyle(raw, issues = []) {
   if (raw.fontFamily !== undefined) style.fontFamily = coerceEnum(raw.fontFamily, FONT_FAMILIES, 'hand').value;
   if (raw.startArrowhead !== undefined) style.startArrowhead = coerceEnum(raw.startArrowhead, ARROWHEADS, 'none').value;
   if (raw.endArrowhead !== undefined) style.endArrowhead = coerceEnum(raw.endArrowhead, ARROWHEADS, 'arrow').value;
+  if (raw.elbow !== undefined) style.elbow = Boolean(raw.elbow);
   if (raw.theme !== undefined) style.theme = raw.theme === 'dark' ? 'dark' : 'light';
   if (raw.grid !== undefined) style.grid = Boolean(raw.grid);
   if (raw.snap !== undefined) style.snap = Boolean(raw.snap);

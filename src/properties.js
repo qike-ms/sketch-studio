@@ -16,6 +16,7 @@ export const STYLE_KEYS = Object.freeze([
   'fontSize',
   'startArrowhead',
   'endArrowhead',
+  'elbow',
 ]);
 
 export function commonValue(values) {

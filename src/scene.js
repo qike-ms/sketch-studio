@@ -184,6 +184,7 @@ export class Scene {
       }
       el.x = container.x + (container.width - el.width) / 2;
       el.y = container.y + (container.height - el.height) / 2;
+      el.angle = container.angle ?? 0;
     }
   }
 
