@@ -202,6 +202,27 @@ export function createPersistence(options = {}) {
     }
   }
 
+  /** A raw slot is promotable only if it parses into a usable scene. */
+  function isValidSnapshotRaw(raw) {
+    if (!raw) return false;
+    try {
+      const result = validateScene(JSON.parse(raw));
+      return result.ok && !(result.stats.total > 0 && result.stats.kept === 0);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Copy a recovery slot and verify the read-back before trusting it. */
+  function copyVerified(key, raw) {
+    try {
+      safeSet(key, raw);
+      return safeGet(key) === raw;
+    } catch {
+      return false;
+    }
+  }
+
   function load() {
     if (!probe()) {
       return {
@@ -239,6 +260,7 @@ export function createPersistence(options = {}) {
           stats: parsed.stats,
           source: parsed.source,
           revision: parsed.revision,
+          raw: candidate.raw,
           savedAt: parsed.savedAt ?? candidate.savedAt ?? null,
         };
       }
@@ -285,12 +307,21 @@ export function createPersistence(options = {}) {
     }
   }
 
-  function save(data) {
+  function save(data, options = {}) {
     if (!probe()) {
       return { ok: false, unavailable: true, quota: false, reason: unavailableReason };
     }
     if (!data || typeof data !== 'object') {
       return { ok: false, error: 'nothing to save' };
+    }
+    // Never persist a scene that would not survive validation on load.
+    try {
+      const check = validateScene(data);
+      if (!check.ok || (check.stats.total > 0 && check.stats.kept === 0)) {
+        return { ok: false, error: 'scene is not valid' };
+      }
+    } catch (error) {
+      return { ok: false, error: `scene could not be validated: ${error?.message ?? error}` };
     }
     const at = now();
     const revision = revisionFactory(at);
@@ -330,15 +361,13 @@ export function createPersistence(options = {}) {
       return { ok: false, error: 'could not stage the save' };
     }
 
-    // Keep the previous good snapshot before replacing it.
-    const previous = safeGet(keys.current);
-    if (previous) {
-      try {
-        JSON.parse(previous);
-        safeSet(keys.backup, previous);
-      } catch {
-        // never copy a corrupt current over a good backup
-      }
+    // Keep a known-good recovery copy before replacing current. Never copy
+    // merely parseable current data: it may be structurally invalid.
+    if (options.recoveryRaw && isValidSnapshotRaw(options.recoveryRaw)) {
+      copyVerified(keys.backup, options.recoveryRaw);
+    } else {
+      const previous = safeGet(keys.current);
+      if (isValidSnapshotRaw(previous)) copyVerified(keys.backup, previous);
     }
     try {
       safeSet(keys.current, raw);
@@ -355,14 +384,9 @@ export function createPersistence(options = {}) {
       return { ok: false, quota: isQuotaError(error), unavailable: !isQuotaError(error), error: error.message };
     }
     safeRemove(keys.pending);
-    // Guarantee at least one recovery copy exists from the very first save.
-    if (!safeGet(keys.backup)) {
-      try {
-        safeSet(keys.backup, raw);
-      } catch {
-        // ring still provides a recovery path
-      }
-    }
+    // Guarantee at least one valid recovery copy exists.
+    const backup = safeGet(keys.backup);
+    if (!isValidSnapshotRaw(backup)) copyVerified(keys.backup, raw);
     updateRing(raw, revision, at);
     lastRevision = revision;
     lastSavedRevision = revision;

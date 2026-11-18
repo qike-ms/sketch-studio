@@ -298,9 +298,9 @@ function scheduleSave() {
   setSaveStatus('Unsaved…');
 }
 
-function saveNow() {
+function saveNow(options = {}) {
   if (conflictPending) return null;
-  const result = persistence.save(snapshotData());
+  const result = persistence.save(snapshotData(), options);
   if (result.ok) {
     dirty = false;
     setSaveStatus('Saved');
@@ -357,8 +357,9 @@ function restore() {
   applyLoadedScene(loaded.scene, loaded.source);
   if (loaded.source !== 'current') {
     toast(`Recovered the drawing from ${loaded.source}.`, 'warning', loaded.issues?.length ? schema.describeIssues(loaded.issues) : null);
-    // Heal the primary slot immediately so the next load is clean.
-    saveNow();
+    // Heal the primary slot immediately, promoting the exact known-good raw
+    // recovery candidate instead of re-copying a rejected current slot.
+    saveNow({ recoveryRaw: loaded.raw });
   } else if (loaded.issues?.length) {
     toast('The saved drawing was repaired.', 'warning', schema.describeIssues(loaded.issues));
   }
