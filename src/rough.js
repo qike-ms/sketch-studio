@@ -133,14 +133,39 @@ export function roughFreehand(points, el) {
   return [points.map((point) => jitterPoint(point, amount, rand))];
 }
 
-/** Two short strokes forming an arrow head at `tip`, pointing back at `tail`. */
-export function arrowHeadPoints(tip, tail, el) {
+function headPoints(tip, tail, el, spreadFactor = 1) {
   const angle = Math.atan2(tip.y - tail.y, tip.x - tail.x);
-  const spread = Math.PI / 7;
+  const spread = (Math.PI / 7) * spreadFactor;
   const size = Math.max(10, 8 + el.strokeWidth * 2.5);
   const head = (offset) => {
     const a = angle + Math.PI - offset;
     return { x: tip.x + Math.cos(a) * size, y: tip.y + Math.sin(a) * size };
   };
-  return [[head(spread), tip], [head(-spread), tip]];
+  return [head(spread), head(-spread)];
+}
+
+/** Two short strokes forming an arrow head at `tip`, pointing back at `tail`. */
+export function arrowHeadPoints(tip, tail, el) {
+  const [left, right] = headPoints(tip, tail, el);
+  return [[left, tip], [right, tip]];
+}
+
+/**
+ * Arrowhead geometry for the four supported styles.
+ * Returns { strokes: path[], triangle: path|null, dot: {center, radius}|null }.
+ */
+export function arrowheadGeometry(style, tip, tail, el) {
+  if (!style || style === 'none') return { strokes: [], triangle: null, dot: null };
+  const [left, right] = headPoints(tip, tail, el, style === 'triangle' ? 0.9 : 1);
+  if (style === 'triangle') {
+    return { strokes: [], triangle: [left, tip, right, left], dot: null };
+  }
+  if (style === 'dot') {
+    return {
+      strokes: [],
+      triangle: null,
+      dot: { center: tip, radius: Math.max(4, el.strokeWidth * 2.2) },
+    };
+  }
+  return { strokes: [[left, tip], [right, tip]], triangle: null, dot: null };
 }

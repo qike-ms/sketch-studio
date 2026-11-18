@@ -129,3 +129,41 @@ describe('path shapes', () => {
     assert.ok(rough.roughStrokeWidth(8) > rough.roughStrokeWidth(1));
   });
 });
+
+describe('arrowhead styles', () => {
+  const tip = { x: 100, y: 0 };
+  const tail = { x: 0, y: 0 };
+  const el = { ...rect, strokeWidth: 2 };
+
+  it('none produces no geometry', () => {
+    assert.deepEqual(rough.arrowheadGeometry('none', tip, tail, el), { strokes: [], triangle: null, dot: null });
+    assert.deepEqual(rough.arrowheadGeometry(null, tip, tail, el), { strokes: [], triangle: null, dot: null });
+  });
+
+  it('arrow produces two strokes', () => {
+    const geometry = rough.arrowheadGeometry('arrow', tip, tail, el);
+    assert.equal(geometry.strokes.length, 2);
+    assert.equal(geometry.triangle, null);
+    assert.equal(geometry.dot, null);
+  });
+
+  it('triangle produces a closed filled path', () => {
+    const geometry = rough.arrowheadGeometry('triangle', tip, tail, el);
+    assert.equal(geometry.strokes.length, 0);
+    assert.equal(geometry.triangle.length, 4);
+    assert.deepEqual(geometry.triangle[1], tip);
+    assert.deepEqual(geometry.triangle[0], geometry.triangle[3]);
+  });
+
+  it('dot produces a circle at the tip', () => {
+    const geometry = rough.arrowheadGeometry('dot', tip, tail, el);
+    assert.deepEqual(geometry.dot.center, tip);
+    assert.ok(geometry.dot.radius >= 4);
+  });
+
+  it('a thicker pen makes larger heads', () => {
+    const thin = rough.arrowheadGeometry('dot', tip, tail, { ...el, strokeWidth: 1 });
+    const thick = rough.arrowheadGeometry('dot', tip, tail, { ...el, strokeWidth: 8 });
+    assert.ok(thick.dot.radius > thin.dot.radius);
+  });
+});
