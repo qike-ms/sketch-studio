@@ -20,6 +20,7 @@ import * as textLib from '../src/text.js';
 import * as exporter from '../src/export.js';
 import * as images from '../src/images.js';
 import * as props from '../src/properties.js';
+import * as controls from '../src/controls.js';
 import * as edit from '../src/edit.js';
 
 const MIN_STROKE = 2;
@@ -1520,54 +1521,112 @@ document.addEventListener('keyup', onKeyUp);
 
 /* ------------------------------------------------------------- toolbar */
 
-function syncPressed(gridId, key, value) {
-  const grid = document.getElementById(gridId);
-  if (!grid) return;
-  for (const button of grid.querySelectorAll('button')) {
-    button.setAttribute('aria-pressed', String(button.dataset[key] === String(value)));
-  }
-}
-
-function displayValue(key) {
-  const style = props.selectionStyle(scene.elements, selection);
-  return style[key] !== undefined ? style[key] : state[key];
-}
-
 function syncToolButtons() {
   for (const button of document.querySelectorAll('[data-tool]')) {
     button.setAttribute('aria-pressed', String(button.dataset.tool === state.tool));
   }
 }
 
-function syncToolbar() {
-  syncToolButtons();
-  const style = props.selectionStyle(scene.elements, selection);
-  syncPressed('strokeStyleGrid', 'style', displayValue('strokeStyle'));
-  syncPressed('colorGrid', 'color', displayValue('strokeColor'));
-  syncPressed('fillGrid', 'fill', displayValue('backgroundColor'));
-  syncPressed('fontSizeGrid', 'size', String(displayValue('fontSize')));
+function syncPressed(gridId, key, value, mixed = false) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
+  if (mixed) grid.dataset.mixed = 'true';
+  else delete grid.dataset.mixed;
+  for (const button of grid.querySelectorAll('button')) {
+    button.setAttribute('aria-pressed', String(!mixed && button.dataset[key] === String(value)));
+  }
+}
 
-  const strokeWidth = document.getElementById('strokeWidth');
-  if (strokeWidth) strokeWidth.value = String(displayValue('strokeWidth'));
-  const opacity = document.getElementById('opacityRange');
-  if (opacity) opacity.value = String(displayValue('opacity'));
-  const roughness = document.getElementById('roughnessSelect');
-  if (roughness) roughness.value = String(displayValue('roughness'));
-  const edge = document.getElementById('edgeStyleSelect');
-  if (edge) edge.value = displayValue('edgeStyle');
-  const font = document.getElementById('fontFamilySelect');
-  if (font) font.value = displayValue('fontFamily');
-  const start = document.getElementById('startArrowheadSelect');
-  if (start) start.value = displayValue('startArrowhead');
-  const end = document.getElementById('endArrowheadSelect');
-  if (end) end.value = displayValue('endArrowhead');
-  const elbow = document.getElementById('elbowToggle');
-  if (elbow) elbow.checked = Boolean(displayValue('elbow'));
+function setControlValue(id, value, mixed, kind = 'value') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (mixed) {
+    el.dataset.mixed = 'true';
+    el.title = 'Mixed values';
+    if (kind === 'checkbox') {
+      el.indeterminate = true;
+      el.checked = false;
+    } else if (kind === 'select') {
+      el.value = '';
+    } else if (kind === 'range') {
+      el.value = String(el.min ?? '0');
+    } else {
+      el.value = '';
+    }
+    return;
+  }
+  delete el.dataset.mixed;
+  el.title = '';
+  if (kind === 'checkbox') {
+    el.indeterminate = false;
+    el.checked = Boolean(value);
+  } else {
+    el.value = String(value ?? '');
+  }
+}
+
+function syncStyleControls() {
+  const view = controls.selectionControls(scene.elements, selection, state);
+  const { controls: values, mixed } = view;
+  syncPressed('strokeStyleGrid', 'style', values.strokeStyle, mixed.strokeStyle);
+  syncPressed('colorGrid', 'color', values.strokeColor, mixed.strokeColor);
+  syncPressed('fillGrid', 'fill', values.backgroundColor, mixed.backgroundColor);
+  syncPressed('fontSizeGrid', 'size', String(values.fontSize), mixed.fontSize);
+
+  setControlValue('strokeWidth', values.strokeWidth, mixed.strokeWidth, 'range');
+  setControlValue('opacityRange', values.opacity, mixed.opacity, 'range');
+  setControlValue('roughnessSelect', values.roughness, mixed.roughness, 'select');
+  setControlValue('edgeStyleSelect', values.edgeStyle, mixed.edgeStyle, 'select');
+  setControlValue('fontFamilySelect', values.fontFamily, mixed.fontFamily, 'select');
+  setControlValue('startArrowheadSelect', values.startArrowhead, mixed.startArrowhead, 'select');
+  setControlValue('endArrowheadSelect', values.endArrowhead, mixed.endArrowhead, 'select');
+  setControlValue('elbowToggle', values.elbow, mixed.elbow, 'checkbox');
 
   if (colorPicker) {
-    colorPicker.value = /^#[0-9a-f]{6}$/i.test(String(displayValue('strokeColor'))) ? displayValue('strokeColor') : '#1e1e1e';
-    colorPicker.setAttribute('aria-pressed', String(!tools.PALETTE.includes(displayValue('strokeColor'))));
+    if (mixed.strokeColor) {
+      colorPicker.dataset.mixed = 'true';
+      colorPicker.title = 'Mixed ink colours';
+      colorPicker.setAttribute('aria-pressed', 'false');
+    } else {
+      delete colorPicker.dataset.mixed;
+      colorPicker.title = 'Pick any ink colour';
+      colorPicker.value = /^#[0-9a-f]{6}$/i.test(String(values.strokeColor)) ? values.strokeColor : '#1e1e1e';
+      colorPicker.setAttribute('aria-pressed', String(!tools.PALETTE.includes(values.strokeColor)));
+    }
   }
+}
+
+function updateSelectionMeta() {
+  const style = props.selectionStyle(scene.elements, selection);
+  const summary = document.getElementById('selectionSummary');
+  if (summary) summary.textContent = props.selectionLabel(style);
+  const angle = document.getElementById('angleInput');
+  if (angle) {
+    if (style.angle !== undefined) {
+      delete angle.dataset.mixed;
+      angle.value = String(Math.round(style.angle));
+    } else if (style.count > 1) {
+      angle.dataset.mixed = 'true';
+      angle.value = '';
+    } else {
+      delete angle.dataset.mixed;
+      angle.value = '';
+    }
+  }
+  const lockBtn = document.getElementById('lockBtn');
+  if (lockBtn) {
+    lockBtn.textContent = style.locked ? 'Locked' : 'Lock';
+    lockBtn.setAttribute('aria-pressed', String(style.locked));
+  }
+  const groupBtn = document.getElementById('groupBtn');
+  if (groupBtn) groupBtn.disabled = selection.length < 2;
+  const ungroupBtn = document.getElementById('ungroupBtn');
+  if (ungroupBtn) ungroupBtn.disabled = !style.grouped;
+}
+
+function syncToolbar() {
+  syncToolButtons();
+  syncStyleControls();
 
   const themeBtn = document.getElementById('themeBtn');
   if (themeBtn) {
@@ -1579,34 +1638,12 @@ function syncToolbar() {
   const snapBtn = document.getElementById('snapBtn');
   if (snapBtn) snapBtn.setAttribute('aria-pressed', String(state.snap));
 
-  const lockBtn = document.getElementById('lockBtn');
-  if (lockBtn) {
-    lockBtn.textContent = style.locked ? 'Locked' : 'Lock';
-    lockBtn.setAttribute('aria-pressed', String(style.locked));
-  }
-  const groupBtn = document.getElementById('groupBtn');
-  if (groupBtn) groupBtn.disabled = selection.length < 2;
-  const ungroupBtn = document.getElementById('ungroupBtn');
-  if (ungroupBtn) ungroupBtn.disabled = !style.grouped;
-
-  updateProperties();
+  updateSelectionMeta();
 }
 
 function updateProperties() {
-  const style = props.selectionStyle(scene.elements, selection);
-  const summary = document.getElementById('selectionSummary');
-  if (summary) summary.textContent = props.selectionLabel(style);
-  const angle = document.getElementById('angleInput');
-  if (angle) angle.value = style.angle !== undefined ? String(Math.round(style.angle)) : '';
-  const lockBtn = document.getElementById('lockBtn');
-  if (lockBtn) {
-    lockBtn.textContent = style.locked ? 'Locked' : 'Lock';
-    lockBtn.setAttribute('aria-pressed', String(style.locked));
-  }
-  const groupBtn = document.getElementById('groupBtn');
-  if (groupBtn) groupBtn.disabled = selection.length < 2;
-  const ungroupBtn = document.getElementById('ungroupBtn');
-  if (ungroupBtn) ungroupBtn.disabled = !style.grouped;
+  syncStyleControls();
+  updateSelectionMeta();
 }
 
 function applyStylePatch(patch, options = {}) {

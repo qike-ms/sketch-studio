@@ -102,3 +102,36 @@ describe('locked elements cannot be edited through UI entry points', () => {
     assert.equal(app.scene.elements.find((el) => el.id === 'label').text, 'hello');
   });
 });
+
+describe('selection controls reflect the current selection', () => {
+  it('updates opacity and stroke controls on a plain selection', () => {
+    reset([
+      rect('red', 0, { strokeColor: '#ff0000', opacity: 25 }),
+      rect('blue', 200, { strokeColor: '#0000ff', opacity: 80 }),
+    ]);
+    dom.dispatch(board, 'pointerdown', { button: 0, pointerId: 1, clientX: 0, clientY: 50 });
+    dom.dispatch(board, 'pointerup', { pointerId: 1 });
+    assert.deepEqual(app.selectionOf(), ['red']);
+    assert.equal(dom.get('opacityRange').value, '25');
+    assert.equal(dom.get('strokeWidth').value, '2');
+
+    dom.dispatch(board, 'pointerdown', { button: 0, pointerId: 2, clientX: 200, clientY: 50 });
+    dom.dispatch(board, 'pointerup', { pointerId: 2 });
+    assert.deepEqual(app.selectionOf(), ['blue']);
+    assert.equal(dom.get('opacityRange').value, '80');
+  });
+
+  it('marks mixed style values explicitly', () => {
+    reset([
+      rect('red', 0, { strokeColor: '#ff0000', opacity: 25 }),
+      rect('blue', 200, { strokeColor: '#0000ff', opacity: 80 }),
+    ]);
+    dom.dispatch(board, 'pointerdown', { button: 0, pointerId: 1, clientX: 0, clientY: 50 });
+    dom.dispatch(board, 'pointerup', { pointerId: 1 });
+    dom.dispatch(board, 'pointerdown', { button: 0, pointerId: 2, shiftKey: true, clientX: 200, clientY: 50 });
+    dom.dispatch(board, 'pointerup', { pointerId: 2 });
+    assert.equal(app.selectionOf().length, 2);
+    assert.equal(dom.get('opacityRange').dataset.mixed, 'true');
+    assert.equal(dom.get('strokeWidth').dataset.mixed, undefined, 'common value is not mixed');
+  });
+});
