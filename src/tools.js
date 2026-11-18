@@ -7,6 +7,7 @@ import {
   BIND_PROXIMITY,
   HANDLE_SIZE,
   CLOSED_SHAPES,
+  absolutePoints,
   distance,
   hitTest,
   normRect,
@@ -175,9 +176,24 @@ export function rotationHandleAt(el, point, size = HANDLE_SIZE) {
   return distance(point, rotationHandlePosition(el)) <= size;
 }
 
-/** Index of a connector vertex under the pointer, or null. */
+/** Visible, editable connector handles. Elbow routes expose only the stored
+ * endpoints: generated routing bends have no stored index to edit.
+ */
+export function connectorHandlePoints(el, find) {
+  const [start, end] = resolveConnector(el, find);
+  if (el.elbow) return [start, end];
+  return resolveConnectorPath(el, find);
+}
+
+/** Index of an editable connector vertex under the pointer, or null. */
 export function connectorVertexAt(el, find, point, size = HANDLE_SIZE) {
   if (!el.points || el.points.length < 2) return null;
+  if (el.elbow) {
+    const [start, end] = resolveConnector(el, find);
+    if (distance(point, start) <= size) return 0;
+    if (distance(point, end) <= size) return el.points.length - 1;
+    return null;
+  }
   const path = resolveConnectorPath(el, find);
   for (let i = 0; i < path.length; i += 1) {
     if (distance(point, path[i]) <= size) return i;
@@ -187,8 +203,9 @@ export function connectorVertexAt(el, find, point, size = HANDLE_SIZE) {
 
 /** Insert a new bend point on the closest segment. Returns the new index. */
 export function insertConnectorPoint(el, find, point) {
-  const path = resolveConnectorPath(el, find);
-  if (path.length < 2) return -1;
+  const stored = absolutePoints(el);
+  if (stored.length < 2) return -1;
+  const path = el.elbow ? stored : resolveConnectorPath(el, find);
   let best = 1;
   let bestDistance = Infinity;
   for (let i = 1; i < path.length; i += 1) {

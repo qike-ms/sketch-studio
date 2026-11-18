@@ -222,6 +222,32 @@ describe('connector editing', () => {
     assert.equal(el.elbow, true);
     assert.equal(tools.toggleElbow(el), false);
   });
+
+  it('maps elbow endpoint handles to stored points, not generated bends', () => {
+    const el = {
+      id: 'e', type: 'arrow', x: 0, y: 0, width: 200, height: 100,
+      points: [{ x: 0, y: 0 }, { x: 200, y: 100 }], elbow: true, strokeWidth: 2,
+    };
+    const path = geo.resolveConnectorPath(el, finder);
+    assert.equal(path.length, 4);
+    const handles = tools.connectorHandlePoints(el, finder);
+    assert.equal(handles.length, 2, 'generated bends are not offered as handles');
+    assert.equal(tools.connectorVertexAt(el, finder, path[path.length - 1]), 1);
+    assert.equal(tools.connectorVertexAt(el, finder, path[1]), null, 'a generated bend is not an editable vertex');
+    assert.equal(tools.moveConnectorPoint(el, finder, 1, { x: 300, y: 200 }), true);
+    const [, end] = geo.resolveConnector(el, finder);
+    assert.deepEqual(end, { x: 300, y: 200 });
+  });
+
+  it('inserts a bend on the stored elbow segment', () => {
+    const el = {
+      id: 'e', type: 'arrow', x: 0, y: 0, width: 200, height: 100,
+      points: [{ x: 0, y: 0 }, { x: 200, y: 100 }], elbow: true, strokeWidth: 2,
+    };
+    const index = tools.insertConnectorPoint(el, finder, { x: 100, y: 50 });
+    assert.equal(index, 1);
+    assert.equal(el.points.length, 3);
+  });
 });
 
 describe('rotation handle', () => {

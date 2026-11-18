@@ -23,7 +23,7 @@ import {
   roughPolygon,
   roughSegment,
 } from '../src/rough.js';
-import { handlePosition } from '../src/tools.js';
+import { handlePosition, connectorHandlePoints } from '../src/tools.js';
 import { FONT_STACKS } from '../src/export.js';
 
 export const HAND_FONT = FONT_STACKS.hand;
@@ -399,7 +399,7 @@ export function drawSelection(context, elements, find, options = {}) {
 }
 
 function handlePoints(el, find) {
-  if (el.type === 'line' || el.type === 'arrow') return resolveConnectorPath(el, find);
+  if (el.type === 'line' || el.type === 'arrow') return connectorHandlePoints(el, find);
   const rect = rectOf(el);
   const centre = rectCenter(rect);
   return ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => {
