@@ -92,6 +92,35 @@ describe('SVG export', () => {
     assert.ok(!bad.includes('<image'));
   });
 
+  it('exports text at its absolute scene position', () => {
+    const text = { id: 't', type: 'text', x: 200, y: 500, width: 80, height: 30, text: 'hi', fontSize: 20, lineHeight: 1.25, strokeColor: '#111', opacity: 100, fontFamily: 'hand', angle: 0 };
+    const svg = exporter.sceneToSVG([text]);
+    assert.match(svg, /<text[^>]*x="200\.00"[^>]*y="500\.00"/);
+    assert.match(svg, /<tspan x="200\.00" dy="0\.00">hi<\/tspan>/);
+  });
+
+  it('keeps multiline text offsets and negative y', () => {
+    const text = { id: 't', type: 'text', x: -40, y: -120, width: 80, height: 60, text: 'one\ntwo', fontSize: 20, lineHeight: 1.5, strokeColor: '#111', opacity: 100, fontFamily: 'hand', angle: 0 };
+    const svg = exporter.sceneToSVG([text]);
+    assert.match(svg, /<text[^>]*x="-40\.00"[^>]*y="-120\.00"/);
+    assert.match(svg, /<tspan x="-40\.00" dy="0\.00">one<\/tspan>/);
+    assert.match(svg, /<tspan x="-40\.00" dy="30\.00">two<\/tspan>/);
+  });
+
+  it('exports rotated text with its position and rotation transform', () => {
+    const text = { id: 't', type: 'text', x: 100, y: 200, width: 80, height: 20, text: 'rotated', fontSize: 20, lineHeight: 1.25, strokeColor: '#111', opacity: 100, fontFamily: 'hand', angle: 45 };
+    const svg = exporter.sceneToSVG([text]);
+    assert.match(svg, /transform="rotate\(45\.00 140\.00 210\.00\)"/);
+    assert.match(svg, /<text[^>]*y="200\.00"/);
+  });
+
+  it('exports a selected bound label with the container position', () => {
+    const box = rect('box', 0, 0, 100, 60);
+    const label = { id: 'label', type: 'text', x: 20, y: 20, width: 40, height: 20, text: 'hi', fontSize: 20, lineHeight: 1.25, strokeColor: '#111', opacity: 100, fontFamily: 'hand', angle: 0, containerId: 'box' };
+    const svg = exporter.sceneToSVG([box, label], { ids: ['box'] });
+    assert.match(svg, /<text[^>]*x="20\.00"[^>]*y="20\.00"/);
+  });
+
   it('handles an empty scene without throwing', () => {
     const svg = exporter.sceneToSVG([]);
     assert.match(svg, /<svg/);

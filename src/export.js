@@ -142,7 +142,7 @@ function textMarkup(el) {
     return `<tspan x="${num(el.x).toFixed(2)}" dy="${dy.toFixed(2)}">${xml(line)}</tspan>`;
   }).join('');
   const font = FONT_STACKS[el.fontFamily] ?? FONT_STACKS.hand;
-  return `<text ${attr('font-family', font)} ${attr('font-size', num(el.fontSize, 24))} ${attr('fill', isSafeColor(el.strokeColor) ? el.strokeColor : '#1e1e1e')} ${attr('dominant-baseline', 'text-before-edge')} xml:space="preserve">${tspans}</text>`;
+  return `<text ${attr('x', num(el.x).toFixed(2))} ${attr('y', num(el.y).toFixed(2))} ${attr('font-family', font)} ${attr('font-size', num(el.fontSize, 24))} ${attr('fill', isSafeColor(el.strokeColor) ? el.strokeColor : '#1e1e1e')} ${attr('dominant-baseline', 'text-before-edge')} xml:space="preserve">${tspans}</text>`;
 }
 
 function imageMarkup(el) {
