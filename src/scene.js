@@ -63,11 +63,30 @@ export function cloneElement(el) {
   return copy;
 }
 
+export const DEFAULT_HISTORY_LIMIT = 100;
+
+function parseSnapshot(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export class Scene {
-  constructor(elements = []) {
+  constructor(elements = [], options = {}) {
     this.elements = elements.map((el) => makeElement(el));
     this.undoStack = [];
     this.redoStack = [];
+    this.historyLimit = options.historyLimit ?? DEFAULT_HISTORY_LIMIT;
+    this.historyIssues = [];
+  }
+
+  setHistoryLimit(limit) {
+    this.historyLimit = Math.max(1, Math.floor(limit));
+    while (this.undoStack.length > this.historyLimit) this.undoStack.shift();
+    while (this.redoStack.length > this.historyLimit) this.redoStack.shift();
   }
 
   findById(id) {
@@ -89,27 +108,58 @@ export class Scene {
   /* --- history ---------------------------------------------------------- */
 
   snapshot() {
-    return JSON.stringify(this.elements);
+    try {
+      return JSON.stringify(this.elements);
+    } catch {
+      return null;
+    }
   }
 
   pushHistory() {
-    this.undoStack.push(this.snapshot());
-    if (this.undoStack.length > 100) this.undoStack.shift();
+    const snapshot = this.snapshot();
+    if (!snapshot) return false;
+    this.undoStack.push(snapshot);
+    while (this.undoStack.length > this.historyLimit) this.undoStack.shift();
     this.redoStack.length = 0;
+    return true;
+  }
+
+  /** Skip corrupt history entries; never replace the scene with garbage. */
+  popValid(stack, label) {
+    while (stack.length) {
+      const raw = stack.pop();
+      const parsed = parseSnapshot(raw);
+      if (parsed) return parsed;
+      this.historyIssues.push({ stack: label, code: 'corrupt-history', message: 'corrupt history entry skipped' });
+      if (this.historyIssues.length > 20) this.historyIssues.shift();
+    }
+    return null;
   }
 
   undo() {
-    if (!this.undoStack.length) return false;
-    this.redoStack.push(this.snapshot());
-    this.elements = JSON.parse(this.undoStack.pop());
+    const current = this.snapshot();
+    if (!current) return false;
+    const next = this.popValid(this.undoStack, 'undo');
+    if (!next) return false;
+    this.redoStack.push(current);
+    while (this.redoStack.length > this.historyLimit) this.redoStack.shift();
+    this.elements = next;
     return true;
   }
 
   redo() {
-    if (!this.redoStack.length) return false;
-    this.undoStack.push(this.snapshot());
-    this.elements = JSON.parse(this.redoStack.pop());
+    const current = this.snapshot();
+    if (!current) return false;
+    const next = this.popValid(this.redoStack, 'redo');
+    if (!next) return false;
+    this.undoStack.push(current);
+    while (this.undoStack.length > this.historyLimit) this.undoStack.shift();
+    this.elements = next;
     return true;
+  }
+
+  historySize() {
+    return { undo: this.undoStack.length, redo: this.redoStack.length, limit: this.historyLimit };
   }
 
   /* --- mutations --------------------------------------------------------- */
@@ -147,9 +197,9 @@ export class Scene {
 
   bindConnectorEnd(id, end, elementId) {
     const el = this.findById(id);
-    if (!el || !elementId) return false;
+    if (!el) return false;
     const key = end === 'start' ? 'startBinding' : 'endBinding';
-    el[key] = { elementId };
+    el[key] = elementId ? { elementId } : null;
     return true;
   }
 
