@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """Record a Sketch Studio demo GIF by driving the live app in headless Chromium.
 
-Regenerates assets/sketch-studio.gif by driving the running app, so the
-demo is real interaction rather than a hand-made animation.
+Regenerates assets/sketch-studio.gif from real interactions: drawing, labels,
+elbow arrows, rotation, grouping/alignment, copy/paste, pan/zoom, grid/snap,
+dark mode, the properties panel, SVG export and a corrupt-JSON recovery.
 
-Needs the dev server on :4171 plus Playwright and Pillow (not project deps):
-    pip install playwright pillow && playwright install chromium
-    python3 tools/make_gif.py [output.gif]   # default: /tmp/sketch-studio.gif
+Playwright and Pillow are not project dependencies. Install them in a venv:
+    python3 -m venv ~/.cache/sketch-studio-venv
+    ~/.cache/sketch-studio-venv/bin/pip install playwright pillow
+    ~/.cache/sketch-studio-venv/bin/playwright install chromium
+Then, with the dev server running on :4171:
+    ~/.cache/sketch-studio-venv/bin/python tools/make_gif.py [output.gif]
 """
 import io
+import json
 import math
+import os
 import sys
 
 from PIL import Image
@@ -17,119 +23,214 @@ from playwright.sync_api import sync_playwright
 
 URL = "http://localhost:4171/index.html"
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/sketch-studio.gif"
-CLIP = {"x": 40, "y": 60, "width": 1180, "height": 700}
+CORRUPT_FILE = "/tmp/sketch-studio-corrupt.json"
+CLIP = {"x": 0, "y": 0, "width": 1280, "height": 800}
 FRAMES = []
+DURATIONS = []
 
 
 class Rec:
     def __init__(self, page):
         self.page = page
 
-    def grab(self):
+    def grab(self, ms=120):
         FRAMES.append(self.page.screenshot(clip=CLIP))
+        DURATIONS.append(ms)
+
+    def pause(self, ms=450):
+        self.grab(ms)
 
 
-def drag(page, rec, x0, y0, x1, y1, steps=8):
+def click(page, rec, selector, wait=250):
+    page.click(selector)
+    rec.grab(wait)
+
+
+def drag(page, rec, x0, y0, x1, y1, steps=8, frame_ms=70):
     page.mouse.move(x0, y0)
     page.mouse.down()
     for i in range(1, steps + 1):
         page.mouse.move(x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps)
-        rec.grab()
+        rec.grab(frame_ms)
     page.mouse.up()
-    rec.grab()
+    rec.grab(frame_ms)
 
 
-def wiggle(page, rec, x0, y0, count=34, span=6):
-    page.mouse.move(x0, y0)
-    page.mouse.down()
-    for i in range(1, count + 1):
-        page.mouse.move(x0 + i * span, y0 + 40 * math.sin(i / 3))
-        rec.grab()
-    page.mouse.up()
-    rec.grab()
+def click_at(page, rec, x, y, wait=220):
+    page.mouse.click(x, y)
+    rec.grab(wait)
 
 
-def type_text(page, rec, text):
+def type_text(page, rec, text, frame_ms=85):
     for ch in text:
         page.keyboard.type(ch)
-        rec.grab()
+        rec.grab(frame_ms)
+
+
+def screen_point(page, selector):
+    return page.evaluate(
+        """(sel) => {
+            const el = sketchStudio.scene.elements.find(e => e.type === sel);
+            if (!el) return null;
+            const p = sketchStudio.viewport.sceneToScreen({ x: el.x + el.width / 2, y: el.y });
+            return { x: p.x, y: p.y };
+        }""",
+        selector,
+    )
 
 
 with sync_playwright() as p:
-    b = p.chromium.launch()
-    pg = b.new_page(viewport={"width": 1280, "height": 800}, device_scale_factor=1)
-    pg.goto(URL)
-    pg.wait_for_function("window.sketchStudio !== undefined")
-    pg.evaluate("sketchStudio.scene.elements = []")
-    pg.evaluate("localStorage.clear()")
-    pg.reload()
-    pg.wait_for_function("window.sketchStudio !== undefined")
-    pg.wait_for_timeout(400)
-    rec = Rec(pg)
-    rec.grab()
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={"width": 1280, "height": 800}, device_scale_factor=1)
+    page.on("download", lambda download: download.cancel())
+    page.goto(URL)
+    page.wait_for_function("window.sketchStudio !== undefined")
+    page.evaluate("localStorage.clear(); sketchStudio.scene.elements = []; sketchStudio.viewport.reset();")
+    page.reload()
+    page.wait_for_function("window.sketchStudio !== undefined")
+    page.wait_for_timeout(500)
+    rec = Rec(page)
+    rec.pause(700)
 
-    pg.evaluate("sketchStudio.setTool('rect')")
-    drag(pg, rec, 300, 220, 560, 400)
+    # Three shapes, with fill and ink changes.
+    click(page, rec, '[data-tool="rect"]')
+    drag(page, rec, 320, 200, 560, 360)
+    click(page, rec, '#fillGrid button.swatch:nth-of-type(4)', 350)
+    click(page, rec, '#colorGrid button.swatch:nth-of-type(6)', 300)
+    click(page, rec, '[data-tool="ellipse"]')
+    drag(page, rec, 680, 200, 860, 340)
+    click(page, rec, '[data-tool="diamond"]')
+    drag(page, rec, 880, 220, 1000, 360)
+    click(page, rec, '#fillGrid button.swatch:nth-of-type(4)', 300)
 
-    pg.evaluate("sketchStudio.setTool('ellipse')")
-    drag(pg, rec, 700, 200, 900, 360)
+    # Double-click the rectangle, type its label, commit with Escape.
+    page.mouse.dblclick(440, 280)
+    rec.pause(350)
+    type_text(page, rec, "Sketch Studio")
+    page.keyboard.press("Escape")
+    rec.pause(450)
 
-    pg.evaluate("sketchStudio.setTool('diamond')")
-    drag(pg, rec, 980, 230, 1120, 400)
+    # Connect rectangle and ellipse, then make the arrow an elbow with heads.
+    click(page, rec, '[data-tool="arrow"]')
+    drag(page, rec, 560, 280, 680, 270)
+    page.select_option("#startArrowheadSelect", "dot")
+    rec.pause(250)
+    page.select_option("#endArrowheadSelect", "triangle")
+    rec.pause(250)
+    page.check("#elbowToggle")
+    rec.pause(450)
 
-    # pick a new ink and a fill: everything drawn after this uses them
-    pg.click(".grid#colorGrid button.swatch:nth-of-type(3)")
-    pg.wait_for_timeout(200)
-    rec.grab()
-    pg.click(".grid#fillGrid button.swatch:nth-of-type(4)")
-    pg.wait_for_timeout(200)
-    rec.grab()
+    # Move the ellipse: the bound elbow arrow follows it.
+    click(page, rec, '[data-tool="select"]')
+    drag(page, rec, 770, 201, 820, 270, steps=10)
+    rec.pause(550)
 
-    pg.evaluate("sketchStudio.setTool('freehand')")
-    wiggle(pg, rec, 200, 560)
+    # Rotate the diamond with its rotation handle.
+    click_at(page, rec, 940, 222)
+    handle = page.evaluate(
+        """() => {
+            const el = sketchStudio.scene.elements.find(e => e.type === 'diamond');
+            return { x: el.x + el.width / 2, y: el.y - 26 };
+        }"""
+    )
+    drag(page, rec, handle["x"], handle["y"], handle["x"] + 78, handle["y"] + 34, steps=10)
+    rec.pause(500)
 
-    pg.evaluate("sketchStudio.setTool('arrow')")
-    drag(pg, rec, 545, 300, 790, 285)
+    # Shift-select rectangle + ellipse, group, align their tops.
+    click_at(page, rec, 321, 201)
+    page.keyboard.down("Shift")
+    click_at(page, rec, 821, 271)
+    page.keyboard.up("Shift")
+    rec.pause(250)
+    click(page, rec, '#groupBtn', 400)
+    click(page, rec, '[data-align="top"]', 500)
+    click(page, rec, '#ungroupBtn', 300)
 
-    # label inside the rectangle: click to start editing, type, Escape commits
-    pg.evaluate("sketchStudio.setTool('text')")
-    pg.mouse.click(430, 310)
-    pg.wait_for_timeout(150)
-    rec.grab()
-    type_text(pg, rec, "Sketch Studio")
-    pg.wait_for_timeout(120)
-    pg.keyboard.press("Escape")
-    pg.wait_for_timeout(180)
-    rec.grab()
+    # Copy/paste the diamond, then undo and redo the paste.
+    point = page.evaluate(
+        """() => {
+            const el = sketchStudio.scene.elements.find(e => e.type === 'diamond');
+            const p = sketchStudio.viewport.sceneToScreen({ x: el.x + el.width / 2, y: el.y + el.height / 2 });
+            return { x: p.x, y: p.y };
+        }"""
+    )
+    click_at(page, rec, point["x"], point["y"])
+    click(page, rec, '#copyBtn', 350)
+    click(page, rec, '#pasteBtn', 500)
+    click(page, rec, '#undoBtn', 400)
+    click(page, rec, '#redoBtn', 400)
 
-    # ink and fill changes, then move the ellipse: the arrow follows its link
-    # unfilled shapes pick up by their outline, so grab the ellipse's top edge
-    pg.evaluate("sketchStudio.setTool('select')")
-    drag(pg, rec, 800, 202, 900, 392, steps=10)
+    # Pan with Space+drag, zoom in, then zoom to fit.
+    page.keyboard.down("Space")
+    drag(page, rec, 600, 420, 700, 470, steps=7)
+    page.keyboard.up("Space")
+    rec.pause(350)
+    click(page, rec, '#zoomInBtn', 300)
+    click(page, rec, '#zoomInBtn', 300)
+    click(page, rec, '#zoomFitBtn', 600)
 
-    # duplicate the diamond, then undo
-    pg.mouse.click(1050, 315)
-    pg.wait_for_timeout(150)
-    rec.grab()
-    pg.click("#dupBtn")
-    pg.wait_for_timeout(250)
-    rec.grab()
-    pg.click("#undoBtn")
-    pg.wait_for_timeout(250)
-    rec.grab()
+    # Grid and snap toggles.
+    click(page, rec, '#gridBtn', 400)
+    click(page, rec, '#gridBtn', 350)
+    click(page, rec, '#snapBtn', 500)
 
-    for _ in range(8):
-        pg.wait_for_timeout(120)
-        rec.grab()
-    b.close()
+    # Dark mode.
+    click(page, rec, '#themeBtn', 600)
 
-W = 680  # GIF width; source clip is 1180x700
+    # Properties panel: select the ellipse, lower opacity, change roughness/dash.
+    point = screen_point(page, "ellipse")
+    click_at(page, rec, point["x"], point["y"], 300)
+    page.evaluate(
+        """() => { const r = document.getElementById('opacityRange'); r.value = '55'; r.dispatchEvent(new Event('input', { bubbles: true })); }"""
+    )
+    rec.pause(350)
+    page.select_option("#roughnessSelect", "2")
+    rec.pause(300)
+    click(page, rec, '[data-style="dashed"]', 450)
+
+    # Export SVG (download cancelled; the toast is the visible result).
+    click(page, rec, '#svgBtn', 700)
+
+    # Fault tolerance: open a corrupt JSON that still contains this drawing.
+    drawing = json.loads(page.evaluate("JSON.stringify(sketchStudio.scene.toJSON())"))
+    corrupt = {
+        "version": 1,
+        "elements": drawing["elements"]
+        + [
+            {"id": drawing["elements"][0]["id"], "type": "rect", "x": "oops", "y": 0, "width": -40, "height": 20},
+            {"id": "bad-type", "type": "triangle", "x": 0, "y": 0, "width": 10, "height": 10},
+            {"id": "bad-link", "type": "arrow", "x": 0, "y": 0, "points": [{"x": 0, "y": 0}, {"x": 60, "y": 0}],
+             "startBinding": {"elementId": "ghost"}},
+        ],
+    }
+    with open(CORRUPT_FILE, "w", encoding="utf-8") as handle:
+        json.dump(corrupt, handle)
+    click(page, rec, '#openBtn', 250)
+    page.set_input_files(".filepicker", CORRUPT_FILE)
+    rec.pause(900)
+    click(page, rec, '#zoomFitBtn', 900)
+    rec.pause(800)
+
+    browser.close()
+
+W = 650  # GIF width; source clip is 1280x800
 first = Image.open(io.BytesIO(FRAMES[0]))
 scale = W / first.width
+height = int(first.height * scale)
 pal = [
-    Image.open(io.BytesIO(data)).convert("RGB").resize((W, int(first.height * scale)), Image.LANCZOS)
-    .convert("P", palette=Image.ADAPTIVE, colors=256)
+    Image.open(io.BytesIO(data)).convert("RGB").resize((W, height), Image.LANCZOS)
+    .convert("P", palette=Image.ADAPTIVE, colors=144)
     for data in FRAMES
 ]
-pal[0].save(OUT, save_all=True, append_images=pal[1:], duration=10, loop=0, optimize=True)
-print(f"frames={len(pal)} size={first.width}x{first.height} -> {OUT}")
+pal[0].save(
+    OUT,
+    save_all=True,
+    append_images=pal[1:],
+    duration=DURATIONS,
+    loop=0,
+    optimize=True,
+    disposal=2,
+)
+size_mb = os.path.getsize(OUT) / (1024 * 1024)
+total_s = sum(DURATIONS) / 1000
+print(f"frames={len(pal)} duration={total_s:.1f}s size={size_mb:.2f}MB -> {OUT}")
