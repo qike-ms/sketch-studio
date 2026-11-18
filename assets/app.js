@@ -72,15 +72,9 @@ const find = (id) => scene.findById(id);
 /* ------------------------------------------------------------- storage */
 
 function browserStorage() {
-  try {
-    const storage = window.localStorage;
-    const probe = '__sketch_studio_probe__';
-    storage.setItem(probe, '1');
-    storage.removeItem(probe);
-    return storage;
-  } catch {
-    return null;
-  }
+  // The factory also guards this, but resolving here keeps the app boot path
+  // inside a try/catch before the toast/error boundary exists.
+  return persistenceModule.resolveStorage(window);
 }
 
 const persistence = persistenceModule.createPersistence({ storage: browserStorage() });

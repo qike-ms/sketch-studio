@@ -26,6 +26,15 @@ export function isQuotaError(error) {
   );
 }
 
+export function resolveStorage(scope = globalThis) {
+  try {
+    const storage = scope?.localStorage;
+    return storage ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Minimal in-memory storage with the Web Storage surface, used by tests. */
 export function memoryStorage(initial = {}) {
   const map = new Map(Object.entries(initial));
@@ -47,7 +56,11 @@ export function memoryStorage(initial = {}) {
 
 export function createPersistence(options = {}) {
   const config = { ...DEFAULT_OPTIONS, ...options };
-  const storage = options.storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+  // An explicitly injected null means "no storage"; do not re-read the global
+  // getter (which may itself throw in a sandboxed/private browser).
+  const storage = Object.prototype.hasOwnProperty.call(options, 'storage')
+    ? (options.storage ?? null)
+    : resolveStorage();
   const setTimeoutFn = options.setTimeout ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimeoutFn = options.clearTimeout ?? ((id) => clearTimeout(id));
   const now = options.now ?? (() => Date.now());
