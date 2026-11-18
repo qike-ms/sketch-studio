@@ -35,7 +35,7 @@ The status column is the current state after implementation.
 | Capability | Excalidraw | Sketch Studio before | Status |
 | --- | --- | --- | --- |
 | Click / shift-click / marquee | yes | yes | done |
-| Multi-element resize | yes | one element at a time | done |
+| Multi-element resize | yes | one element at a time | partial |
 | Copy / cut / paste (in-app + system clipboard JSON) | yes | duplicate only | done |
 | Group / ungroup | yes | missing | done |
 | Lock / unlock | yes | missing | done |
@@ -57,7 +57,7 @@ The status column is the current state after implementation.
 | Text | yes | yes | done |
 | Double-click shape to edit its label | yes | click Text tool, then type | done |
 | Arrowheads per end (none/arrow/triangle/dot) | yes | arrow only, one style | done |
-| Multi-point lines/arrows, elbow routing | yes | two points, straight | done |
+| Multi-point lines/arrows, elbow routing | yes | two points, straight | partial |
 | Opacity | yes | stored but no UI | done |
 | Roughness (architect/artist/cartoonist) | yes | one fixed style | done |
 | Edge style (sharp/round) | yes | sharp only | done |
@@ -70,17 +70,17 @@ The status column is the current state after implementation.
 
 | Capability | Excalidraw | Sketch Studio before | Status |
 | --- | --- | --- | --- |
-| PNG export | yes | whole scene | done |
+| PNG export | yes | whole scene | partial |
 | SVG export | yes | missing | done |
 | Export selection only | yes | missing | done |
 | JSON save / open | yes | yes, no validation | done |
 | Schema version + migrations | yes | version field, no migrations | done |
 | Validate/repair on load | yes | none | done |
-| Debounced atomic autosave | yes | every pointer-up, single slot | done |
-| Snapshot ring / corrupt-save recovery | partial | none | done |
+| Debounced two-phase autosave | yes | every pointer-up, single slot | partial |
+| Snapshot ring / corrupt-save recovery | partial | none | partial |
 | QuotaExceeded handling | yes | none | done |
 | Storage unavailable (private mode) | yes | crash on save | done |
-| Multi-tab edit detection | yes (collab) | none | done |
+| Multi-tab edit detection | yes (collab) | none | partial |
 | Bounded undo history | yes | 100 entries, no guard | done |
 | Error boundary + recovery export | partial | console.warn only | done |
 | Import guards (size, count, parse, XSS) | yes | none | done |
@@ -105,9 +105,9 @@ does a user reach for on the first minute of editing?
 
 1. `src/schema.js`: schema version 2, migration from v1/unversioned, element
    defaults, strict validation and repair with an issue report.
-2. `src/persistence.js`: debounced atomic autosave, current + backup + ring of
-   N good snapshots, quota detection, unavailable-storage fallback, multi-tab
-   revision detection.
+2. `src/persistence.js`: debounced two-phase autosave, current + backup + a
+   best-effort ring of validated snapshots, quota detection,
+   unavailable-storage fallback, multi-tab revision detection.
 3. `src/import.js`: file-size, element-count, parse-error and string guards.
 4. `src/errors.js`: guarded handlers, toast state, recovery JSON escape hatch.
 5. Bounded undo/redo with snapshot validation.
@@ -157,18 +157,38 @@ does a user reach for on the first minute of editing?
 
 ## 4. What shipped (final)
 
-P0–P4 shipped on `excalidraw-parity`, and P5 (browser verification, README and
-this roadmap) is complete. Every new `src/` function and fault-tolerance path
-has unit coverage; the suite went from 59 to 214 tests. A headless-Chromium
-story run checks 18/18 behaviours end to end, including corrupt-file recovery,
-elbow binding, rotation, grouping/alignment, clipboard remapping, zoom/pan,
-theme, properties and SVG export.
+P0–P4 shipped on `excalidraw-parity`; P5 added README/roadmap corrections and a
+real-browser smoke script. The suite went from 59 to 347 unit tests, covering
+the `src/` layers with injectable storage, timers and id factories. The
+historical “18/18 story run” is not reproduced in this repository; the demo GIF
+recorder drives interactions but contains no assertions, so it is not an
+acceptance test.
+
+`tools/browser_check.py` starts a local server, drives real pointer/keyboard
+input in headless Chromium, and passes 21/21 checks: drawing and debounced
+autosave, single and mixed selection controls, locked double-click editing,
+10,001-character text round-trip, corrupt-current → backup recovery, queued
+write cancellation on conflict, Load other tab, zoom-aware rotation handle,
+rotated resize anchor, elbow endpoint editing, SVG text y/line offsets, and boot
+with a denied `localStorage` getter. This is a smoke check, not exhaustive
+browser coverage.
 
 Known remaining gaps (deliberately out of scope for a toy app):
 
 - Rotation of connectors; rotation is single-element for shapes/text/images.
+- Elbow routing is a midpoint dogleg, not obstacle avoidance. Only stored elbow
+  endpoints are editable; generated routing bends are display-only.
+- Multi-selection resize uses aggregate bounds while individual handles are
+  drawn per element, so the affordance is not fully Excalidraw-like.
 - Frames, libraries, collaboration, laser pointer, command palette.
 - Rich text (inline styling, text alignment beyond centre).
-- Image cropping and SVG image import.
+- Image cropping and SVG image import; image data URLs are checked by MIME,
+  size and prefix, not decoded pixel limits.
+- PNG export has no pixel/side cap.
+- Viewport pan/zoom is not persisted.
+- The snapshot ring is best effort and may be trimmed under quota pressure;
+  pending is staging, not a crash-recovery journal.
+- Real multi-tab timing, touch/pinch, OS clipboard permissions and image
+  decoding remain browser-dependent and are not covered by the smoke script.
 - IndexedDB storage for very large scenes; localStorage + snapshot ring is the
   current ceiling.

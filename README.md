@@ -5,7 +5,7 @@
 > This is a toy drawing app built entirely using **`local/qwen3.8-flash-next-coder`** — a Qwen3.8-Flash-Next GGUF at **IQ1_M quantization**, assisted by a speculative draft model.
 > The model runs locally on a MacBook, served by **Splash** (`splash serve --offline --host 127.0.0.1`) and driven through the **pi** coding agent with some of its coding skills at `high` reasoning effort.
 > **No cloud models, no API calls, no telemetry.** Everything runs locally.
-> The goal is to explore **what a heavily quantized local model can build in a few hours**. The app now includes 214 unit tests and a broad, still dependency-free feature set, with minimal review beyond running it in a browser.
+> The goal is to explore **what a heavily quantized local model can build in a few hours**. The app now includes 347 unit tests and a 21-check headless-Chromium smoke script, with a broad, still dependency-free feature set. This is a toy: the checks below are evidence for the flows they exercise, not a claim of exhaustive browser coverage or production readiness.
 
 A hand-drawn editor for the browser: paint sketchy shapes, type text, and
 connect objects with arrows that stay attached when you move things around.
@@ -32,7 +32,15 @@ python3 -m venv ~/.cache/sketch-studio-venv
 ~/.cache/sketch-studio-venv/bin/pip install playwright pillow
 ~/.cache/sketch-studio-venv/bin/playwright install chromium
 ~/.cache/sketch-studio-venv/bin/python tools/make_gif.py
+~/.cache/sketch-studio-venv/bin/python tools/browser_check.py
 ```
+
+`tools/browser_check.py` starts a local server, drives real pointer/keyboard
+input in headless Chromium, and asserts user-visible outcomes. It covers the
+drawing/autosave path, selection and mixed style controls, lock, long-text
+round-trips, corrupt-backup recovery, conflict cancellation and Load, zoom-aware
+rotation, rotated resize, elbow endpoint editing, SVG text placement, and boot
+with denied storage. It is a smoke check, not a full browser test suite.
 
 ## Run
 
@@ -55,15 +63,15 @@ npm test           # Node 20+; runs the DOM-free unit tests in tests/
 
 | Tool | Key | Behaviour |
 | --- | --- | --- |
-| Select | `V` | click / shift-click, marquee drag, move, 8 resize handles, multi-element resize, rotation handle, arrow-key nudge |
+| Select | `V` | click / shift-click, marquee drag, single-element move, 8 handles on a single selection, aggregate multi-selection resize, rotation handle, arrow-key nudge |
 | Rect | `R` | jittered corners, straight edges; `Shift` constrains to a square |
 | Ellipse | `O` | `Shift` constrains to a circle |
 | Diamond | `D` | rhombus through the box edge midpoints |
 | Line | `L` | `Shift` snaps to 15° steps |
-| Arrow | `A` | docked ends follow their shapes; drag a bend point to add a vertex; elbow routing |
+| Arrow | `A` | docked ends follow their shapes; drag a stored bend point to add a vertex; elbow routing is a midpoint dogleg (no obstacle avoidance), and elbow connectors expose only their stored endpoints |
 | Pen | `P` | freehand stroke |
 | Eraser | `E` | drag across shapes to delete them |
-| Text | `T` | click to type, `Enter` for a newline, `Esc` to commit |
+| Text | `T` | click to type, `Enter` for a newline, `Esc` to commit; text is kept verbatim up to a 1,000,000-character scene budget |
 | Image | — | insert, paste or drop PNG/JPEG/GIF/WebP; stored as a validated data URL |
 
 Style controls: stroke width, solid/dashed/dotted, palette plus a custom colour
@@ -79,10 +87,12 @@ clear, and a right-click context menu.
 Canvas and UX: infinite pan (space+drag, middle-drag, wheel/trackpad), anchored
 zoom (Ctrl/⌘+wheel, pinch, buttons), zoom indicator, zoom-to-fit and
 zoom-to-selection, grid toggle and snap, light/dark theme, a properties panel
-that reflects the current selection, toasts, and a `?` shortcut overlay.
+that reflects single-selection values and marks mixed values explicitly, toasts,
+and a `?` shortcut overlay.
 
 Anything centred inside a shape — including a label you typed — re-centres
-when that shape moves or resizes. Labels rotate with their container.
+when that shape moves or resizes. Labels follow their container's angle on
+move/resize and on angle-field edits.
 
 ## Shortcuts
 
@@ -109,34 +119,45 @@ The drawing is treated as data that must survive bad input, bad saves and
 concurrent tabs. Every load path — localStorage, opened JSON and clipboard —
 goes through the same validator before anything reaches the renderer.
 
-- **Validate and repair, never drop the scene.** `src/schema.js` repairs
-  recoverable elements (bad coordinates, colours, enums, duplicate ids,
-  dangling bindings/containers) and drops only unrecoverable ones. The UI
-  reports what happened instead of failing silently.
+- **Validate and repair; reject only when nothing usable remains.**
+  `src/schema.js` repairs recoverable elements (bad coordinates, colours, enums,
+  duplicate ids, dangling bindings/containers) and drops only unrecoverable
+  ones. The UI reports what happened instead of failing silently. Long text is
+  kept verbatim; whole-scene text/point budgets reject oversized scenes with a
+  clear issue rather than silently truncating content.
 - **Schema versioning.** Scenes are version 2; version 1 and unversioned data
   are migrated by filling missing fields only.
-- **Atomic debounced autosave.** `src/persistence.js` writes a pending copy,
-  promotes it to current, keeps the previous good snapshot as backup, and
-  maintains a ring of the last five good snapshots. Corrupt current data is
-  never allowed to overwrite the backup.
+- **Two-phase debounced autosave.** `src/persistence.js` writes a pending copy,
+  verifies it, promotes it to current, keeps the previous validated snapshot as
+  backup, and maintains a best-effort ring of up to five validated snapshots.
+  Quota pressure can trim or remove the ring, and the pending slot is staging,
+  not a crash journal. Separate Web Storage writes are not a cross-key
+  transaction. Corrupt current data is never allowed to overwrite the backup.
 - **Quota and unavailable storage.** `QuotaExceededError` and private-mode
   storage failures are detected, surfaced as toasts, and do not lose the
   in-memory drawing. Reads still work when the quota is full.
 - **Multi-tab conflicts.** Revision numbers detect another tab changing the
-  drawing. The user gets `Load other tab` / `Keep mine` instead of a silent
-  overwrite; closing the tab does not flush over an unresolved conflict.
+  drawing. A queued debounce is cancelled when a conflict appears, and every
+  write is guarded by the revision the controller last observed, so a stale
+  timer cannot overwrite the other tab. Newer external revisions replace the
+  pending conflict prompt. The user gets `Load other tab` / `Keep mine`;
+  closing the tab does not flush over an unresolved conflict.
 - **Bounded, validated undo.** History is capped (100 entries); corrupt or
   missing snapshots are skipped rather than crashing undo.
 - **Error boundary and recovery export.** Guarded handlers catch unexpected
   failures, show a toast, and offer a recovery JSON download.
-- **Import guards.** File size, element count, JSON parse errors, markup-like
-  text and image MIME/size/data-URL checks are rejected before use. User text
-  is rendered with canvas text and escaped SVG — never via `innerHTML`.
-- **Fault-tolerant UI.** A single bad element cannot abort the render; export
-  and load failures are reported without destroying the current scene.
+- **Import guards.** Byte/character limits are checked before `JSON.parse`;
+  element, point and whole-scene text budgets are enforced; malformed JSON,
+  invalid roots and oversized images are rejected. Markup-like text is kept
+  verbatim and rendered as canvas text or escaped SVG — never via `innerHTML`.
+- **Fault-tolerant UI.** Rendering isolates each element so one bad element
+  cannot abort the rest; load failures fall through the recovery slots and are
+  reported without destroying the current scene.
 
 The unit suite covers these paths with injectable storage, timers and id
-factories, including corrupt fixtures and quota/unavailable storage.
+factories, including corrupt fixtures and quota/unavailable storage. The
+headless-Chromium smoke script checks selected end-to-end flows with real
+pointer/keyboard input; it is not exhaustive browser coverage.
 
 ## Layout
 
@@ -146,7 +167,10 @@ assets/app.js       DOM, canvas sizing, gestures, toolbar state, persistence, sh
 assets/render.js    viewport-aware canvas painting (strokes, fills, images, handles, caret)
 assets/styles.css   light/dark layout and chrome
 src/schema.js       versioning, migration, validation and repair
-src/persistence.js  debounced atomic autosave, backup/ring, quota, multi-tab revisions
+src/persistence.js  debounced two-phase autosave, backup/ring, quota, multi-tab revisions
+src/autosave.js     debounce/conflict controller: cancel stale writes, Load/Keep, unload guard
+src/controls.js     selection-to-controls projection, including mixed values
+src/edit.js         lock policy, including container-lock inheritance
 src/import.js       file/clipboard guards, markup detection, escaping
 src/errors.js       error boundary, toasts, recovery payload
 src/scene.js        element store, bounded validated history, selection model
@@ -162,9 +186,26 @@ src/images.js       MIME/size/data-URL guards, fitting, image elements
 src/properties.js   mixed-selection reflection and style patches
 tests/*.test.mjs    unit tests for the DOM-free layers
 tools/make_gif.py   regenerates the demo GIF (Playwright + Pillow)
+tools/browser_check.py  headless-Chromium smoke checks with real input (optional)
 ```
 
 The `src/` layer has no DOM access, which is what keeps it unit-testable.
+
+## Known limitations
+
+- This is a single-browser toy editor. There is no collaboration backend; the
+  conflict path relies on Web Storage events from another tab in the same
+  browser profile.
+- Elbow routing is a midpoint dogleg, not obstacle avoidance. Connectors are not
+  rotated.
+- Multi-selection resize uses aggregate bounds, but individual handles are still
+  drawn per element, so the affordance is not fully Excalidraw-like.
+- Viewport pan/zoom is not persisted; only the scene, style and theme are.
+- PNG export has no pixel/side cap, and image data URLs are checked by MIME,
+  size and prefix rather than decoded pixel limits.
+- The snapshot ring is best effort and can be trimmed under quota pressure.
+- The browser smoke script covers the listed flows, not touch/pinch, OS
+  clipboard permissions, image decoding or real multi-tab timing.
 
 ## License
 
