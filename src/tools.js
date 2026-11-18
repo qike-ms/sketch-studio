@@ -15,8 +15,11 @@ import {
   rectsIntersect,
   rectContainsRect,
   resolveConnector,
+  resolveConnectorPath,
+  rotationHandlePosition,
   setConnectorFromAbsolute,
   elementsInRect,
+  distanceToSegment,
 } from './geometry.js';
 import { ELEMENT_DEFAULTS, makeElement } from './scene.js';
 
@@ -57,7 +60,11 @@ export function toolFromShortcut(key) {
 }
 
 export function styleFromState(state) {
-  const keys = ['strokeColor', 'backgroundColor', 'strokeWidth', 'strokeStyle', 'opacity', 'roughness', 'fontSize'];
+  const keys = [
+    'strokeColor', 'backgroundColor', 'strokeWidth', 'strokeStyle', 'opacity',
+    'roughness', 'fontSize', 'edgeStyle', 'fontFamily',
+    'startArrowhead', 'endArrowhead', 'elbow',
+  ];
   const picked = {};
   for (const key of keys) {
     if (state[key] !== undefined) picked[key] = state[key];
@@ -69,6 +76,8 @@ export function createDraft(tool, start, style) {
   const base = { ...ELEMENT_DEFAULTS, ...styleFromState(style), type: tool };
   if (tool === 'line' || tool === 'arrow') {
     base.points = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+    base.startArrowhead = style.startArrowhead ?? 'none';
+    base.endArrowhead = style.endArrowhead ?? (tool === 'arrow' ? 'arrow' : 'none');
   } else if (tool === 'freehand') {
     base.points = [{ x: 0, y: 0 }];
   }
@@ -159,6 +168,64 @@ export function connectorHandleAt(el, find, point, size = HANDLE_SIZE) {
   if (distance(point, start) <= size) return 'start';
   if (distance(point, end) <= size) return 'end';
   return null;
+}
+
+/** Rotation handle sits above the (possibly rotated) top edge. */
+export function rotationHandleAt(el, point, size = HANDLE_SIZE) {
+  return distance(point, rotationHandlePosition(el)) <= size;
+}
+
+/** Index of a connector vertex under the pointer, or null. */
+export function connectorVertexAt(el, find, point, size = HANDLE_SIZE) {
+  if (!el.points || el.points.length < 2) return null;
+  const path = resolveConnectorPath(el, find);
+  for (let i = 0; i < path.length; i += 1) {
+    if (distance(point, path[i]) <= size) return i;
+  }
+  return null;
+}
+
+/** Insert a new bend point on the closest segment. Returns the new index. */
+export function insertConnectorPoint(el, find, point) {
+  const path = resolveConnectorPath(el, find);
+  if (path.length < 2) return -1;
+  let best = 1;
+  let bestDistance = Infinity;
+  for (let i = 1; i < path.length; i += 1) {
+    const d = distanceToSegment(point, path[i - 1], path[i]);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = i;
+    }
+  }
+  const relative = { x: point.x - el.x, y: point.y - el.y };
+  el.points.splice(best, 0, relative);
+  normalizePoints(el);
+  return best;
+}
+
+/** Move a connector vertex; moving an end frees its binding. */
+export function moveConnectorPoint(el, find, index, target) {
+  if (!el.points || index < 0 || index >= el.points.length) return false;
+  el.points[index] = { x: target.x - el.x, y: target.y - el.y };
+  if (index === 0) el.startBinding = null;
+  if (index === el.points.length - 1) el.endBinding = null;
+  normalizePoints(el);
+  return true;
+}
+
+/** Remove an interior bend point (never the two ends). */
+export function removeConnectorPoint(el, index) {
+  if (!el.points || el.points.length <= 2) return false;
+  if (index <= 0 || index >= el.points.length - 1) return false;
+  el.points.splice(index, 1);
+  normalizePoints(el);
+  return true;
+}
+
+export function toggleElbow(el) {
+  el.elbow = !el.elbow;
+  return el.elbow;
 }
 
 export function resizeRect(rect, handle, dx, dy, lockAspect = false) {

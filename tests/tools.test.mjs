@@ -174,3 +174,61 @@ describe('linking', () => {
     assert.deepEqual(hits, ['a']);
   });
 });
+
+describe('connector editing', () => {
+  const arrow = {
+    id: 'a', type: 'arrow', x: 0, y: 0, width: 100, height: 100,
+    points: [{ x: 0, y: 0 }, { x: 50, y: 80 }, { x: 100, y: 0 }], strokeWidth: 2,
+    startBinding: { elementId: 'box' }, endBinding: null,
+  };
+  const finder = () => null;
+
+  it('finds a vertex under the pointer', () => {
+    assert.equal(tools.connectorVertexAt(arrow, finder, { x: 50, y: 80 }), 1);
+    assert.equal(tools.connectorVertexAt(arrow, finder, { x: 0, y: 0 }), 0);
+    assert.equal(tools.connectorVertexAt(arrow, finder, { x: 50, y: 20 }), null);
+  });
+
+  it('inserts a bend point on the closest segment', () => {
+    const el = { ...arrow, points: arrow.points.map((p) => ({ ...p })) };
+    const index = tools.insertConnectorPoint(el, finder, { x: 25, y: 40 });
+    assert.equal(index, 1);
+    assert.equal(el.points.length, 4);
+    assert.deepEqual(geo.resolveConnectorPath(el, finder), [
+      { x: 0, y: 0 }, { x: 25, y: 40 }, { x: 50, y: 80 }, { x: 100, y: 0 },
+    ]);
+  });
+
+  it('moves a vertex and frees an end binding', () => {
+    const el = { ...arrow, points: arrow.points.map((p) => ({ ...p })) };
+    assert.equal(tools.moveConnectorPoint(el, finder, 0, { x: -20, y: 10 }), true);
+    assert.equal(el.startBinding, null);
+    const [start] = geo.resolveConnector(el, finder);
+    assert.deepEqual(start, { x: -20, y: 10 });
+    assert.equal(tools.moveConnectorPoint(el, finder, 99, { x: 0, y: 0 }), false);
+  });
+
+  it('removes only interior points', () => {
+    const el = { ...arrow, points: arrow.points.map((p) => ({ ...p })) };
+    assert.equal(tools.removeConnectorPoint(el, 0), false);
+    assert.equal(tools.removeConnectorPoint(el, 2), false);
+    assert.equal(tools.removeConnectorPoint(el, 1), true);
+    assert.equal(el.points.length, 2);
+  });
+
+  it('toggles elbow routing', () => {
+    const el = { ...arrow, elbow: false };
+    assert.equal(tools.toggleElbow(el), true);
+    assert.equal(el.elbow, true);
+    assert.equal(tools.toggleElbow(el), false);
+  });
+});
+
+describe('rotation handle', () => {
+  it('hits the handle above a rotated top edge', () => {
+    const el = { id: 'a', type: 'rect', x: 0, y: 0, width: 100, height: 40, angle: 90, strokeWidth: 2 };
+    const handle = geo.rotationHandlePosition(el);
+    assert.equal(tools.rotationHandleAt(el, handle), true);
+    assert.equal(tools.rotationHandleAt(el, { x: 0, y: 0 }), false);
+  });
+});
