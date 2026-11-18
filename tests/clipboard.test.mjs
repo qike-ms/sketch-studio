@@ -94,6 +94,31 @@ describe('paste remapping', () => {
     assert.deepEqual(result.elements[0].groupIds, ['pg1', 'pg2']);
     assert.equal(result.elements[0].id, 'p1');
   });
+
+  it('gives repeated pastes distinct group ids', () => {
+    const payload = [
+      rect('a', 0, 0, { groupIds: ['g'] }),
+      rect('b', 200, 0, { groupIds: ['g'] }),
+    ];
+    const first = clipboard.pasteElements([], payload, { dx: 0, dy: 0 });
+    const second = clipboard.pasteElements(first.elements, payload, { dx: 0, dy: 0 });
+    const groups = [...first.elements, ...second.elements].map((el) => el.groupIds[0]);
+    assert.equal(new Set(groups).size, 2, 'each paste owns an independent group');
+    assert.deepEqual(first.elements[0].groupIds, first.elements[1].groupIds);
+    assert.deepEqual(second.elements[0].groupIds, second.elements[1].groupIds);
+    assert.notEqual(first.elements[0].groupIds[0], second.elements[0].groupIds[0]);
+  });
+
+  it('avoids group ids that already exist in an imported scene', () => {
+    const existing = [
+      rect('x', 0, 0, { groupIds: ['group_paste_1'] }),
+      rect('y', 20, 0, { groupIds: ['group_paste_2'] }),
+    ];
+    const result = clipboard.pasteElements(existing, [rect('a', 0, 0, { groupIds: ['g'] })], {
+      groupFactory: (n) => `group_paste_${n}`,
+    });
+    assert.equal(result.elements[0].groupIds[0], 'group_paste_3');
+  });
 });
 
 describe('fallback clipboard', () => {

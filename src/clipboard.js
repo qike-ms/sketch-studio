@@ -69,12 +69,23 @@ export function pasteElements(existing, payloadElements, options = {}) {
   const idMap = new Map();
   for (const el of payloadElements) idMap.set(el.id, nextId());
 
+  // Reserve every group id already in the scene (including earlier generated
+  // paste groups) so repeated pastes never merge independent copies.
+  const takenGroups = new Set();
+  for (const el of existing) {
+    for (const groupId of el.groupIds ?? []) takenGroups.add(groupId);
+  }
   const groupMap = new Map();
   let groupCounter = 0;
   const mapGroup = (groupId) => {
     if (!groupMap.has(groupId)) {
-      groupCounter += 1;
-      groupMap.set(groupId, groupFactory(groupCounter));
+      let candidate;
+      do {
+        groupCounter += 1;
+        candidate = groupFactory(groupCounter);
+      } while (takenGroups.has(candidate));
+      takenGroups.add(candidate);
+      groupMap.set(groupId, candidate);
     }
     return groupMap.get(groupId);
   };
