@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import * as geo from '../src/geometry.js';
 import * as tools from '../src/tools.js';
+import { drawHandles } from '../assets/render.js';
 
 const find = () => null;
 
@@ -176,5 +177,38 @@ describe('rotated resize keeps the opposite world-space anchor', () => {
       const next = tools.resizeRotatedElement(base, 'se', start, { x: start.x + delta, y: start.y + delta }, false);
       assert.ok(close(anchor, worldHandle(next, 90, 'nw')));
     }
+  });
+});
+
+
+describe('rotation handle display and picking agree at every zoom', () => {
+  for (const zoom of [0.1, 0.5, 1, 2, 8]) {
+    it(`zoom ${zoom}`, () => {
+      const el = { id: 'a', type: 'rect', x: 0, y: 0, width: 100, height: 40, angle: 0, locked: false };
+      const arcs = [];
+      const context = {
+        save() {}, restore() {}, setLineDash() {}, beginPath() {}, rect() {}, fill() {}, stroke() {},
+        moveTo() {}, lineTo() {}, arc(x, y) { arcs.push({ x, y }); },
+      };
+      drawHandles(context, [el], () => null, { zoom, showRotation: true });
+      assert.ok(arcs.length, 'rotation handle was drawn');
+      const drawn = arcs[arcs.length - 1];
+      const expected = geo.rotationHandlePosition(el, geo.rotationHandleDistance(zoom));
+      assert.ok(Math.abs(drawn.x - expected.x) < 1e-9 && Math.abs(drawn.y - expected.y) < 1e-9);
+      assert.equal(tools.rotationHandleAt(el, drawn, geo.HANDLE_SIZE / zoom, zoom), true);
+    });
+  }
+
+  it('does not pick the unadjusted scene-space distance when zoomed', () => {
+    const el = { id: 'a', type: 'rect', x: 0, y: 0, width: 100, height: 40, angle: 0, locked: false };
+    const stale = { x: 50, y: -26 };
+    assert.equal(tools.rotationHandleAt(el, stale, geo.HANDLE_SIZE / 2, 2), false);
+    assert.equal(tools.rotationHandleAt(el, geo.rotationHandlePosition(el, geo.rotationHandleDistance(2)), geo.HANDLE_SIZE / 2, 2), true);
+  });
+
+  it('works for rotated shapes at non-unit zoom', () => {
+    const el = { id: 'a', type: 'rect', x: 0, y: 0, width: 100, height: 40, angle: 90, locked: false };
+    const drawn = geo.rotationHandlePosition(el, geo.rotationHandleDistance(2));
+    assert.equal(tools.rotationHandleAt(el, drawn, geo.HANDLE_SIZE / 2, 2), true);
   });
 });

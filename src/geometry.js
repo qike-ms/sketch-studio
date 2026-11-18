@@ -12,6 +12,7 @@
 export const HIT_TOLERANCE = 8;
 export const BIND_PROXIMITY = 14;
 export const HANDLE_SIZE = 8;
+export const ROTATION_HANDLE_SCREEN_DISTANCE = 26;
 
 export const CLOSED_SHAPES = Object.freeze(['rect', 'ellipse', 'diamond']);
 export const CONNECTOR_TYPES = Object.freeze(['line', 'arrow']);
@@ -378,10 +379,16 @@ export function elementsInRect(elements, rect, { containedOnly = false, find = n
   return hits;
 }
 
-export function rotationHandlePosition(el, distanceFromTop = 26) {
+export function rotationHandlePosition(el, distanceFromTop = ROTATION_HANDLE_SCREEN_DISTANCE) {
   const rect = rectOf(el);
   const top = { x: rect.x + rect.width / 2, y: rect.y - distanceFromTop };
   return el.angle ? rotatePoint(top, rectCenter(rect), el.angle) : top;
+}
+
+/** Scene-space distance for a constant on-screen handle gap. */
+export function rotationHandleDistance(zoom = 1) {
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  return ROTATION_HANDLE_SCREEN_DISTANCE / safeZoom;
 }
 
 /** Degrees to rotate an element so its top edge points at the cursor. */

@@ -20,6 +20,7 @@ import {
   resolveConnectorPath,
   rotatePoint,
   rotationHandlePosition,
+  rotationHandleDistance,
   setConnectorFromAbsolute,
   elementsInRect,
   distanceToSegment,
@@ -174,8 +175,8 @@ export function connectorHandleAt(el, find, point, size = HANDLE_SIZE) {
 }
 
 /** Rotation handle sits above the (possibly rotated) top edge. */
-export function rotationHandleAt(el, point, size = HANDLE_SIZE) {
-  return distance(point, rotationHandlePosition(el)) <= size;
+export function rotationHandleAt(el, point, size = HANDLE_SIZE, zoom = 1) {
+  return distance(point, rotationHandlePosition(el, rotationHandleDistance(zoom))) <= size;
 }
 
 /** Visible, editable connector handles. Elbow routes expose only the stored

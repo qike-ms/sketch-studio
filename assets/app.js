@@ -583,7 +583,7 @@ function onPointerDown(event) {
             safeRender();
             return;
           }
-        } else if (tools.rotationHandleAt(only, point, geo.HANDLE_SIZE / viewport.zoom)) {
+        } else if (tools.rotationHandleAt(only, point, geo.HANDLE_SIZE / viewport.zoom, viewport.zoom)) {
           scene.pushHistory();
           gesture = {
             mode: 'rotate',

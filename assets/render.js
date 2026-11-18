@@ -15,6 +15,8 @@ import {
   rectCenter,
   rectOf,
   rotatePoint,
+  rotationHandleDistance,
+  rotationHandlePosition,
 } from '../src/geometry.js';
 import {
   arrowheadGeometry,
@@ -433,8 +435,7 @@ export function drawHandles(context, elements, find, options = {}) {
       if (el.type === 'line' || el.type === 'arrow' || el.type === 'freehand' || el.locked) continue;
       const rect = rectOf(el);
       const centre = rectCenter(rect);
-      const top = { x: rect.x + rect.width / 2, y: rect.y - 26 / zoom };
-      const handle = el.angle ? rotatePoint(top, centre, el.angle) : top;
+      const handle = rotationHandlePosition(el, rotationHandleDistance(zoom));
       context.strokeStyle = color;
       context.lineWidth = 1.5 / zoom;
       context.beginPath();
