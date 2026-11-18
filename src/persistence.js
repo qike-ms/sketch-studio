@@ -292,6 +292,17 @@ export function createPersistence(options = {}) {
     return safeGet(keys.current);
   }
 
+  function readCurrentRevision() {
+    const raw = safeGet(keys.current);
+    if (!raw) return null;
+    try {
+      const data = JSON.parse(raw);
+      return typeof data.revision === 'string' ? data.revision : null;
+    } catch {
+      return null;
+    }
+  }
+
   function readSnapshotMeta() {
     return readRing([]).map((entry) => ({
       revision: entry.revision ?? null,
@@ -326,6 +337,23 @@ export function createPersistence(options = {}) {
     }
     if (!data || typeof data !== 'object') {
       return { ok: false, error: 'nothing to save' };
+    }
+    // A queued write must not overwrite a newer revision written by another tab.
+    if (Object.prototype.hasOwnProperty.call(options, 'expectRevision')) {
+      const currentRevision = readCurrentRevision();
+      if (currentRevision !== options.expectRevision) {
+        const issues = [];
+        const external = parseCandidate(safeGet(keys.current), 'other-tab', issues);
+        notify({ type: 'conflict', revision: external?.revision ?? null, scene: external?.scene ?? null });
+        return {
+          ok: false,
+          conflict: true,
+          corrupt: !external,
+          revision: external?.revision ?? null,
+          scene: external?.scene ?? null,
+          issues,
+        };
+      }
     }
     // Never persist a scene that would not survive validation on load.
     try {
@@ -481,6 +509,7 @@ export function createPersistence(options = {}) {
     inspectExternal,
     clear,
     currentRaw,
+    currentRevision: readCurrentRevision,
     snapshots: readSnapshotMeta,
     status: () => ({ status, reason: unavailableReason, available: status === 'ok' || status === 'unknown' }),
     revision: () => lastRevision,

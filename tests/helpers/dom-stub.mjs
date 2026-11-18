@@ -79,8 +79,11 @@ export function installDomStub(options = {}) {
     event.target ??= target;
     event.preventDefault ??= () => {};
     event.stopPropagation ??= () => {};
-    const handlers = target.listeners?.[name] ?? [];
-    return handlers.map((fn) => fn(event));
+    const direct = target.listeners?.[name] ?? [];
+    const registered = listeners
+      .filter((entry) => entry.target === target && entry.name === name)
+      .map((entry) => entry.fn);
+    return [...direct, ...registered].map((fn) => fn(event));
   }
 
   const document = makeElement('DOCUMENT');

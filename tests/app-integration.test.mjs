@@ -135,3 +135,81 @@ describe('selection controls reflect the current selection', () => {
     assert.equal(dom.get('strokeWidth').dataset.mixed, undefined, 'common value is not mixed');
   });
 });
+
+describe('multi-tab conflict wiring', () => {
+  const key = 'sketch-studio:v2';
+
+  function externalScene(id) {
+    return { version: 2, revision: `rev-${id}`, elements: [rect(id)] };
+  }
+
+  function deliverStorageEvent(newValue) {
+    dom.dispatch(dom.window, 'storage', { key, newValue });
+  }
+
+  function lastConflictToast() {
+    return app.toasts().filter((toast) => /Another tab changed/.test(toast.message)).at(-1);
+  }
+
+  it('cancels a queued debounce when a conflict appears', () => {
+    reset([rect('local')]);
+    storage._map.clear();
+    app.saveController.noteLoaded({ revision: null });
+    app.save();
+    keydown('g');
+    assert.ok(timers.size > 0, 'a save is queued');
+
+    const foreign = externalScene('foreign');
+    storage.setItem(key, JSON.stringify(foreign));
+    deliverStorageEvent(storage.getItem(key));
+    assert.equal(JSON.parse(storage.getItem(key)).elements[0].id, 'foreign');
+    assert.equal(timers.size, 0, 'the queued write was cancelled');
+    runTimers();
+    assert.equal(JSON.parse(storage.getItem(key)).elements[0].id, 'foreign');
+    assert.equal(app.saveController.dirty, true);
+    assert.equal(app.saveController.conflict.revision, 'rev-foreign');
+  });
+
+  it('does not flush over an unresolved conflict on unload', () => {
+    reset([rect('local')]);
+    storage._map.clear();
+    app.saveController.noteLoaded({ revision: null });
+    app.save();
+    keydown('g');
+    storage.setItem(key, JSON.stringify(externalScene('foreign')));
+    deliverStorageEvent(storage.getItem(key));
+    dom.dispatch(dom.window, 'beforeunload', {});
+    assert.equal(JSON.parse(storage.getItem(key)).elements[0].id, 'foreign');
+  });
+
+  it('Load other tab applies the external scene', () => {
+    reset([rect('local')]);
+    storage._map.clear();
+    app.saveController.noteLoaded({ revision: null });
+    app.save();
+    keydown('g');
+    storage.setItem(key, JSON.stringify(externalScene('foreign')));
+    deliverStorageEvent(storage.getItem(key));
+    const toast = lastConflictToast();
+    toast.action.find((action) => action.label === 'Load other tab').run();
+    assert.deepEqual(app.scene.elements.map((el) => el.id), ['foreign']);
+    assert.equal(app.saveController.dirty, false);
+    assert.equal(app.saveController.conflict, null);
+  });
+
+  it('Keep mine writes the local scene after the decision', () => {
+    reset([rect('local')]);
+    storage._map.clear();
+    app.saveController.noteLoaded({ revision: null });
+    app.save();
+    app.scene.elements[0].x = 42;
+    keydown('g');
+    storage.setItem(key, JSON.stringify(externalScene('foreign')));
+    deliverStorageEvent(storage.getItem(key));
+    lastConflictToast().action.find((action) => action.label === 'Keep mine').run();
+    const saved = JSON.parse(storage.getItem(key));
+    assert.equal(saved.elements[0].id, 'local');
+    assert.equal(saved.elements[0].x, 42);
+    assert.equal(app.saveController.dirty, false);
+  });
+});

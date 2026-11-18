@@ -11,6 +11,7 @@ import * as tools from '../src/tools.js';
 import * as paint from './render.js';
 import * as schema from '../src/schema.js';
 import * as persistenceModule from '../src/persistence.js';
+import { createSaveController } from '../src/autosave.js';
 import * as importer from '../src/import.js';
 import * as errors from '../src/errors.js';
 import { Viewport, zoomLabel } from '../src/viewport.js';
@@ -61,9 +62,6 @@ let gesture = null;
 let marquee = null;
 let colorPicker = null;
 let spaceDown = false;
-let dirty = false;
-let conflictPending = false;
-let conflictScene = null;
 let lastPointerScene = null;
 let lastStorageWarning = '';
 let textLimitWarned = false;
@@ -285,39 +283,78 @@ function setSaveStatus(text) {
   if (el) el.textContent = text;
 }
 
-function scheduleSave() {
-  dirty = true;
-  if (conflictPending) {
-    setSaveStatus('Conflict — choose a version');
-    return;
+function presentSaveEvent(event) {
+  switch (event.type) {
+    case 'scheduled':
+      setSaveStatus('Unsaved…');
+      break;
+    case 'saved':
+      setSaveStatus('Saved');
+      break;
+    case 'blocked':
+      setSaveStatus('Conflict — choose a version');
+      break;
+    case 'conflict':
+    case 'conflict-updated':
+      setSaveStatus('Conflict — choose a version');
+      showConflictToast(event.conflict);
+      break;
+    case 'adopt-external':
+      adoptExternalScene(event.external);
+      break;
+    case 'corrupt-external':
+      toast('Another tab wrote a corrupt save; it was ignored.', 'error', schema.describeIssues(event.external.issues ?? []));
+      break;
+    case 'resolve-load': {
+      const conflict = event.conflict;
+      if (conflict?.scene) {
+        applyLoadedScene(conflict.scene, 'another tab');
+        autosave.noteSceneReplaced(conflict.revision ?? persistence.currentRevision());
+        toast('Loaded changes from another tab.', 'info');
+      }
+      break;
+    }
+    case 'resolve-keep':
+      if (event.result?.ok) {
+        setSaveStatus('Saved');
+        toast('Kept this tab’s version.', 'info');
+      }
+      break;
+    case 'quota':
+      setSaveStatus('Storage full — in memory');
+      if (lastStorageWarning !== 'quota') {
+        lastStorageWarning = 'quota';
+        toast('Storage is full. Changes stay in memory; export JSON to be safe.', 'warning');
+      }
+      break;
+    case 'unavailable':
+      setSaveStatus('Storage unavailable — in memory');
+      if (lastStorageWarning !== 'unavailable') {
+        lastStorageWarning = 'unavailable';
+        toast('Browser storage is unavailable. Changes stay in memory; export JSON to be safe.', 'warning');
+      }
+      break;
+    case 'error':
+      setSaveStatus('Save failed');
+      toast(event.result?.error ?? 'Could not save the drawing.', 'error');
+      break;
+    default:
+      break;
   }
-  persistence.schedule(snapshotData());
-  setSaveStatus('Unsaved…');
+}
+
+const autosave = createSaveController({
+  persistence,
+  snapshot: snapshotData,
+  onEvent: presentSaveEvent,
+});
+
+function scheduleSave() {
+  autosave.schedule();
 }
 
 function saveNow(options = {}) {
-  if (conflictPending) return null;
-  const result = persistence.save(snapshotData(), options);
-  if (result.ok) {
-    dirty = false;
-    setSaveStatus('Saved');
-  } else if (result.quota) {
-    setSaveStatus('Storage full — in memory');
-    if (lastStorageWarning !== 'quota') {
-      lastStorageWarning = 'quota';
-      toast('Storage is full. Changes stay in memory; export JSON to be safe.', 'warning');
-    }
-  } else if (result.unavailable) {
-    setSaveStatus('Storage unavailable — in memory');
-    if (lastStorageWarning !== 'unavailable') {
-      lastStorageWarning = 'unavailable';
-      toast('Browser storage is unavailable. Changes stay in memory; export JSON to be safe.', 'warning');
-    }
-  } else {
-    setSaveStatus('Save failed');
-    toast(result.error ?? 'Could not save the drawing.', 'error');
-  }
-  return result;
+  return autosave.saveNow(options);
 }
 
 function applyLoadedScene(loaded, source) {
@@ -329,7 +366,6 @@ function applyLoadedScene(loaded, source) {
   state.theme = loaded.theme === 'dark' ? 'dark' : (style.theme ?? 'light');
   document.body.classList.toggle('dark', state.theme === 'dark');
   selection = [];
-  dirty = false;
   refreshTextMetrics();
   syncToolbar();
   updateProperties();
@@ -341,6 +377,7 @@ function restore() {
   const result = boundary.guard(() => persistence.load(), 'restore');
   const loaded = result.value;
   if (!loaded) return;
+  autosave.noteLoaded(loaded);
   if (loaded.unavailable) {
     toast('Storage is unavailable; this session will not autosave.', 'warning', loaded.reason);
     return;
@@ -356,7 +393,7 @@ function restore() {
     toast(`Recovered the drawing from ${loaded.source}.`, 'warning', loaded.issues?.length ? schema.describeIssues(loaded.issues) : null);
     // Heal the primary slot immediately, promoting the exact known-good raw
     // recovery candidate instead of re-copying a rejected current slot.
-    saveNow({ recoveryRaw: loaded.raw });
+    autosave.saveNow({ recoveryRaw: loaded.raw }, true);
   } else if (loaded.issues?.length) {
     toast('The saved drawing was repaired.', 'warning', schema.describeIssues(loaded.issues));
   }
@@ -365,55 +402,23 @@ function restore() {
 function adoptExternalScene(external) {
   if (!external?.scene) return;
   applyLoadedScene(external.scene, 'another tab');
+  autosave.noteSceneReplaced(external.revision ?? persistence.currentRevision());
   toast('Loaded changes from another tab.', 'info');
 }
 
-function showConflictToast(external) {
-  conflictScene = external.scene;
+function showConflictToast(conflict) {
   toast('Another tab changed the drawing.', 'warning', 'Your unsaved changes would overwrite it.', [
-    { label: 'Load other tab', run: () => {
-      conflictPending = false;
-      adoptExternalScene(external);
-    } },
-    { label: 'Keep mine', run: () => {
-      conflictPending = false;
-      saveNow();
-      toast('Kept this tab’s version.', 'info');
-    } },
+    { label: 'Load other tab', run: () => autosave.resolveLoad() },
+    { label: 'Keep mine', run: () => autosave.resolveKeep() },
   ]);
 }
 
-persistence.subscribe((event) => {
-  if (event.type === 'save') {
-    dirty = false;
-    setSaveStatus('Saved');
-  } else if (event.type === 'quota') {
-    setSaveStatus('Storage full — in memory');
-  } else if (event.type === 'unavailable') {
-    setSaveStatus('Storage unavailable — in memory');
-  }
-});
-
 window.addEventListener('storage', (event) => {
-  boundary.guard(() => {
-    const external = persistence.inspectExternal(event);
-    if (!external) return;
-    if (external.corrupt) {
-      toast('Another tab wrote a corrupt save; it was ignored.', 'error', schema.describeIssues(external.issues ?? []));
-      return;
-    }
-    if (conflictPending) return;
-    if (!dirty) {
-      adoptExternalScene(external);
-      return;
-    }
-    conflictPending = true;
-    showConflictToast(external);
-  }, 'storage-event');
+  boundary.guard(() => autosave.inspect(event), 'storage-event');
 });
 
 window.addEventListener('beforeunload', () => {
-  if (!conflictPending) persistence.flush();
+  autosave.flush();
 });
 
 /* ------------------------------------------------------------ gestures */
@@ -1299,6 +1304,7 @@ function openJSON() {
     }
     scene.pushHistory();
     applyLoadedScene(result.scene, 'file');
+    autosave.noteSceneReplaced(persistence.currentRevision());
     scheduleSave();
     safeRender();
     toast('Scene opened.', 'success', result.issues.length ? schema.describeIssues(result.issues) : null);
@@ -2051,6 +2057,7 @@ window.sketchStudio = {
       .filter((el) => el.type === 'text')
       .map((el) => ({ id: el.id, text: el.text, containerId: el.containerId })),
   save: saveNow,
+  saveController: autosave,
   undo: undoAction,
   redo: redoAction,
   paste: pasteFromClipboard,
