@@ -72,7 +72,7 @@ export function ungroupElements(elements, ids) {
     for (const groupId of el.groupIds ?? []) groups.add(groupId);
   }
   for (const el of elements) {
-    if (!Array.isArray(el.groupIds)) continue;
+    if (!Array.isArray(el.groupIds) || el.locked) continue;
     el.groupIds = el.groupIds.filter((groupId) => !groups.has(groupId));
   }
   return [...groups];

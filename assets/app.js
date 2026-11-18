@@ -20,6 +20,7 @@ import * as textLib from '../src/text.js';
 import * as exporter from '../src/export.js';
 import * as images from '../src/images.js';
 import * as props from '../src/properties.js';
+import * as edit from '../src/edit.js';
 
 const MIN_STROKE = 2;
 
@@ -551,7 +552,7 @@ function onPointerDown(event) {
       scene.pushHistory();
       gesture = { mode: 'erase', last: point };
       const hits = tools.eraseHits(scene.elements, point, point, find)
-        .filter((id) => !find(id)?.locked);
+        .filter((id) => !edit.isElementLocked(find(id), find));
       if (hits.length) scene.removeElements(hits);
       safeRender();
       return;
@@ -569,7 +570,7 @@ function onPointerDown(event) {
     // select tool -----------------------------------------------------------
     if (selection.length === 1) {
       const only = find(selection[0]);
-      if (only && !only.locked) {
+      if (only && !edit.isElementLocked(only, find)) {
         if (only.type === 'line' || only.type === 'arrow') {
           const vertex = tools.connectorVertexAt(only, find, point, geo.HANDLE_SIZE / viewport.zoom);
           if (vertex !== null) {
@@ -624,7 +625,7 @@ function onPointerDown(event) {
           start: point,
           rect: bounds,
           elements: selectedElements()
-            .filter((el) => !el.locked)
+            .filter((el) => !edit.isElementLocked(el, find))
             .map((el) => ({
               id: el.id,
               x: el.x,
@@ -648,7 +649,7 @@ function onPointerDown(event) {
           el.containerId = null;
         }
       }
-      const movable = selectedElements().filter((el) => !el.locked);
+      const movable = selectedElements().filter((el) => !edit.isElementLocked(el, find));
       gesture = {
         mode: 'move',
         origin: point,
@@ -705,7 +706,7 @@ function onPointerMove(event) {
         break;
       case 'erase': {
         const hits = tools.eraseHits(scene.elements, gesture.last, point, find)
-          .filter((id) => !find(id)?.locked);
+          .filter((id) => !edit.isElementLocked(find(id), find));
         if (hits.length) scene.removeElements(hits);
         gesture.last = point;
         break;
@@ -824,6 +825,10 @@ canvas.addEventListener('pointerleave', () => { if (gesture?.mode === 'pan') can
 /* ----------------------------------------------------------- text entry */
 
 function startText(point, hit) {
+  if (hit && edit.isElementLocked(hit, find)) {
+    toast('Locked elements cannot be edited.', 'info');
+    return;
+  }
   scene.pushHistory();
   textLimitWarned = false;
   if (hit && hit.type === 'text') {
@@ -858,7 +863,7 @@ function startText(point, hit) {
 
 function typeAtCaret(character) {
   const el = find(editing?.id);
-  if (!el) return;
+  if (!el || edit.isElementLocked(el, find)) return;
   const next = textLib.insertText(el.text, editing.caret, character, {
     maxLength: schema.DEFAULT_LIMITS.maxTextLength,
   });
@@ -878,7 +883,7 @@ function typeAtCaret(character) {
 
 function deleteAtCaret(forward = false) {
   const el = find(editing?.id);
-  if (!el) return;
+  if (!el || edit.isElementLocked(el, find)) return;
   const next = textLib.deleteText(el.text, editing.caret, forward);
   el.text = next.text;
   editing.caret = next.caret;
@@ -931,7 +936,7 @@ function redoAction() {
 }
 
 function deleteSelection() {
-  const ids = selection.filter((id) => !find(id)?.locked);
+  const ids = edit.filterEditable(scene.elements, selection, find);
   if (!ids.length) {
     toast(selection.length ? 'Locked elements cannot be deleted.' : 'Nothing selected.', 'info');
     return;
@@ -965,29 +970,38 @@ function bringToFront() {
 
 function clearCanvas() {
   if (!scene.elements.length) return;
+  const ids = edit.filterEditable(scene.elements, scene.elements.map((el) => el.id), find);
+  if (!ids.length) {
+    toast('Locked elements cannot be cleared.', 'info');
+    return;
+  }
+  const lockedCount = scene.elements.length - ids.length;
   scene.pushHistory();
-  scene.elements = [];
+  scene.removeElements(ids);
   setSelection([]);
   scheduleSave();
   safeRender();
+  if (lockedCount) toast('Locked elements were left in place.', 'info');
 }
 
 function groupSelection() {
-  if (selection.length < 2) {
-    toast('Select at least two elements to group.', 'info');
+  const ids = edit.filterEditable(scene.elements, selection, find);
+  if (ids.length < 2) {
+    toast('Select at least two unlocked elements to group.', 'info');
     return;
   }
   scene.pushHistory();
-  arrange.groupElements(scene.elements, selection, `group_${Date.now().toString(36)}_${uid()}`);
+  arrange.groupElements(scene.elements, ids, `group_${Date.now().toString(36)}_${uid()}`);
   scheduleSave();
   updateProperties();
   safeRender();
 }
 
 function ungroupSelection() {
-  if (!selection.length) return;
+  const ids = edit.filterEditable(scene.elements, selection, find);
+  if (!ids.length) return;
   scene.pushHistory();
-  const removed = arrange.ungroupElements(scene.elements, selection);
+  const removed = arrange.ungroupElements(scene.elements, ids);
   if (!removed.length) toast('The selection is not grouped.', 'info');
   scheduleSave();
   updateProperties();
@@ -1005,12 +1019,13 @@ function lockSelection() {
 }
 
 function alignSelection(mode) {
-  if (selection.length < 2) {
-    toast('Select at least two elements to align.', 'info');
+  const ids = edit.filterEditable(scene.elements, selection, find);
+  if (ids.length < 2) {
+    toast('Select at least two unlocked elements to align.', 'info');
     return;
   }
   scene.pushHistory();
-  const moved = arrange.alignElements(scene.elements, selection, mode, find);
+  const moved = arrange.alignElements(scene.elements, ids, mode, find);
   if (!moved.length) {
     toast('Nothing moved (locked elements stay put).', 'info');
   }
@@ -1020,12 +1035,13 @@ function alignSelection(mode) {
 }
 
 function distributeSelection(axis) {
-  if (selection.length < 3) {
-    toast('Select at least three elements to distribute.', 'info');
+  const ids = edit.filterEditable(scene.elements, selection, find);
+  if (ids.length < 3) {
+    toast('Select at least three unlocked elements to distribute.', 'info');
     return;
   }
   scene.pushHistory();
-  arrange.distributeElements(scene.elements, selection, axis, find);
+  arrange.distributeElements(scene.elements, ids, axis, find);
   scene.syncLabels();
   scheduleSave();
   safeRender();
@@ -1040,9 +1056,10 @@ function zorder(mode) {
 }
 
 function nudge(dx, dy) {
-  if (!selection.length) return;
+  const ids = edit.filterEditable(scene.elements, selection, find);
+  if (!ids.length) return;
   scene.pushHistory();
-  const moved = arrange.nudgeElements(scene.elements, selection, dx, dy);
+  const moved = arrange.nudgeElements(scene.elements, ids, dx, dy);
   if (!moved.length) return;
   scene.syncLabels();
   scheduleSave();
@@ -1598,7 +1615,9 @@ function applyStylePatch(patch, options = {}) {
   }
   if (selection.length) {
     if (options.history !== false) scene.pushHistory();
-    const changed = props.applyStyle(scene.elements, selection, patch);
+    const changed = props.applyStyle(scene.elements, selection, patch, {
+      isLocked: (el) => edit.isElementLocked(el, find),
+    });
     if (changed.length) {
       refreshTextMetrics();
       scheduleSave();
@@ -1727,6 +1746,10 @@ canvas.addEventListener('dblclick', (event) => boundary.guard(() => {
     startText(point, null);
     scheduleSave();
     safeRender();
+    return;
+  }
+  if (edit.isElementLocked(hit, find)) {
+    toast('Locked elements cannot be edited.', 'info');
     return;
   }
   if (hit.type === 'text') {
@@ -1929,7 +1952,9 @@ document.getElementById('zoomFitBtn').addEventListener('click', () => zoomToFit(
 document.getElementById('angleInput').addEventListener('change', (event) => {
   if (!selection.length) return;
   scene.pushHistory();
-  props.setAngle(scene.elements, selection, Number(event.target.value));
+  props.setAngle(scene.elements, selection, Number(event.target.value), {
+    isLocked: (el) => edit.isElementLocked(el, find),
+  });
   scheduleSave();
   updateProperties();
   safeRender();

@@ -51,12 +51,13 @@ export function cleanStylePatch(patch) {
 }
 
 /** Apply a style patch to unlocked selected elements. Returns changed ids. */
-export function applyStyle(elements, ids, patch) {
+export function applyStyle(elements, ids, patch, options = {}) {
+  const isLocked = options.isLocked ?? ((el) => el.locked);
   const cleaned = cleanStylePatch(patch);
   const chosen = new Set(ids);
   const changed = [];
   for (const el of elements) {
-    if (!chosen.has(el.id) || el.locked) continue;
+    if (!chosen.has(el.id) || isLocked(el)) continue;
     let touched = false;
     for (const [key, value] of Object.entries(cleaned)) {
       if (key === 'theme' || key === 'grid' || key === 'snap') continue;
@@ -70,13 +71,14 @@ export function applyStyle(elements, ids, patch) {
   return changed;
 }
 
-export function setAngle(elements, ids, angle) {
+export function setAngle(elements, ids, angle, options = {}) {
+  const isLocked = options.isLocked ?? ((el) => el.locked);
   if (!Number.isFinite(angle)) return [];
   const chosen = new Set(ids);
   const changed = [];
   const value = ((angle % 360) + 360) % 360;
   for (const el of elements) {
-    if (!chosen.has(el.id) || el.locked) continue;
+    if (!chosen.has(el.id) || isLocked(el)) continue;
     if (el.angle !== value) {
       el.angle = value;
       changed.push(el.id);
