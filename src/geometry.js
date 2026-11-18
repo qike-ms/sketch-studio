@@ -37,6 +37,76 @@ export function rectCenter(rect) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
 }
 
+export function degToRad(degrees) {
+  return ((Number.isFinite(degrees) ? degrees : 0) * Math.PI) / 180;
+}
+
+export function normalizeAngle(degrees) {
+  const value = Number.isFinite(degrees) ? degrees : 0;
+  return ((value % 360) + 360) % 360;
+}
+
+export function rotatePoint(point, center, degrees) {
+  const angle = degToRad(degrees);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  };
+}
+
+export function rotateVector(vector, degrees) {
+  const angle = degToRad(degrees);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return { x: vector.x * cos - vector.y * sin, y: vector.x * sin + vector.y * cos };
+}
+
+export function elementCenter(el) {
+  return rectCenter(rectOf(el));
+}
+
+/** Point in an element's unrotated local frame. */
+export function localPoint(el, point) {
+  const angle = el.angle ?? 0;
+  return angle ? rotatePoint(point, elementCenter(el), -angle) : { x: point.x, y: point.y };
+}
+
+export function rotatedCorners(el) {
+  const rect = rectOf(el);
+  const corners = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y + rect.height },
+    { x: rect.x, y: rect.y + rect.height },
+  ];
+  if (!el.angle) return corners;
+  const center = rectCenter(rect);
+  return corners.map((corner) => rotatePoint(corner, center, el.angle));
+}
+
+export function boundsOfPoints(points) {
+  return pointsBBox(points);
+}
+
+/** Axis-aligned bounds including rotation. */
+export function elementBounds(el, find = null) {
+  if (!el.angle) return find ? resolvedRect(el, find) : rectOf(el);
+  if (CONNECTOR_TYPES.includes(el.type) || el.type === 'freehand') {
+    const points = find ? resolveConnectorPath(el, find) : absolutePoints(el);
+    const center = pointsBBox(points);
+    const pivot = {
+      x: (center.x * 2 + center.width) / 2,
+      y: (center.y * 2 + center.height) / 2,
+    };
+    return pointsBBox(points.map((point) => rotatePoint(point, pivot, el.angle)));
+  }
+  return pointsBBox(rotatedCorners(el));
+}
+
 export function pointInsideRect(rect, point, pad = 0) {
   return (
     point.x >= rect.x - pad &&
@@ -132,7 +202,9 @@ export function boundaryPoint(el, direction, gap = 0) {
   const center = rectCenter(rect);
   const halfW = Math.max(rect.width / 2, 0.5);
   const halfH = Math.max(rect.height / 2, 0.5);
-  let { x: dx, y: dy } = direction;
+  const angle = el.angle ?? 0;
+  const localDirection = angle ? rotateVector(direction, -angle) : direction;
+  let { x: dx, y: dy } = localDirection;
   const length = Math.hypot(dx, dy);
   if (length < 1e-9) return center;
   dx /= length;
@@ -149,7 +221,8 @@ export function boundaryPoint(el, direction, gap = 0) {
     const q = Math.max(Math.abs(dx) / halfW, Math.abs(dy) / halfH);
     radius = 1 / Math.max(q, 1e-9);
   }
-  return { x: center.x + dx * (radius + gap), y: center.y + dy * (radius + gap) };
+  const point = { x: center.x + dx * (radius + gap), y: center.y + dy * (radius + gap) };
+  return angle ? rotatePoint(point, center, angle) : point;
 }
 
 /**
@@ -177,16 +250,48 @@ export function resolveConnector(el, find) {
   return [start, end];
 }
 
+/** Orthogonal (elbow) route between two points. */
+export function elbowRoute(start, end) {
+  const midX = (start.x + end.x) / 2;
+  const midY = (start.y + end.y) / 2;
+  if (Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)) {
+    return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+  }
+  return [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
+}
+
+/**
+ * Full absolute polyline for a connector, preserving intermediate points and
+ * replacing the ends with their resolved binding positions.
+ */
+export function resolveConnectorPath(el, find) {
+  if (!el.points || !el.points.length) return [];
+  const stored = absolutePoints(el);
+  const pivot = pointsBBox(stored);
+  const center = { x: pivot.x + pivot.width / 2, y: pivot.y + pivot.height / 2 };
+  const rotated = el.angle ? stored.map((point) => rotatePoint(point, center, el.angle)) : stored;
+  const [start, end] = resolveConnector(el, find);
+  if (el.elbow) return elbowRoute(start, end);
+  if (rotated.length <= 2) return [start, end];
+  const middle = rotated.slice(1, -1);
+  return [start, ...middle, end];
+}
+
+/** All points of a freehand stroke in absolute scene coordinates. */
+export function resolvedFreehand(el) {
+  const points = absolutePoints(el);
+  if (!el.angle) return points;
+  const box = pointsBBox(points);
+  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  return points.map((point) => rotatePoint(point, center, el.angle));
+}
+
 /** Bounding box that reflects the resolved connector ends. */
 export function resolvedRect(el, find) {
-  if ((el.type === 'line' || el.type === 'arrow') && (el.startBinding || el.endBinding)) {
-    const [start, end] = resolveConnector(el, find);
-    return {
-      x: Math.min(start.x, end.x),
-      y: Math.min(start.y, end.y),
-      width: Math.abs(end.x - start.x),
-      height: Math.abs(end.y - start.y),
-    };
+  if (CONNECTOR_TYPES.includes(el.type)) {
+    if (el.startBinding || el.endBinding || el.elbow || (el.points && el.points.length > 2)) {
+      return pointsBBox(resolveConnectorPath(el, find));
+    }
   }
   return rectOf(el);
 }
@@ -216,11 +321,15 @@ export function isFilled(el) {
 export function hitTest(el, point, find, tolerance = HIT_TOLERANCE) {
   const slop = tolerance + (el.strokeWidth ?? 1) / 2;
 
-  if (el.type === 'text') return pointInsideRect(rectOf(el), point, tolerance);
+  if (el.type === 'text' || el.type === 'image') {
+    const local = localPoint(el, point);
+    return pointInsideRect(rectOf(el), local, tolerance);
+  }
 
   if (CONNECTOR_TYPES.includes(el.type) || el.type === 'freehand') {
     const points =
-      el.type === 'freehand' ? absolutePoints(el) : resolveConnector(el, find);
+      el.type === 'freehand' ? resolvedFreehand(el) : resolveConnectorPath(el, find);
+    if (points.length === 0) return false;
     if (points.length === 1) return distance(point, points[0]) <= slop;
     for (let i = 1; i < points.length; i += 1) {
       if (distanceToSegment(point, points[i - 1], points[i]) <= slop) return true;
@@ -228,9 +337,10 @@ export function hitTest(el, point, find, tolerance = HIT_TOLERANCE) {
     return false;
   }
 
-  if (!shapeContains(el, point, slop)) return false;
+  const local = localPoint(el, point);
+  if (!shapeContains(el, local, slop)) return false;
   if (isFilled(el)) return true;
-  return !shapeContains(el, point, -slop);
+  return !shapeContains(el, local, -slop);
 }
 
 export function isContainer(el) {
@@ -260,12 +370,25 @@ export function containerAt(elements, point, { predicate = isContainer } = {}) {
 export function elementsInRect(elements, rect, { containedOnly = false, find = null } = {}) {
   const hits = [];
   for (const el of elements) {
-    const elRect = find ? resolvedRect(el, find) : rectOf(el);
+    const elRect = find ? elementBounds(el, find) : (el.angle ? elementBounds(el) : rectOf(el));
     if (containedOnly ? rectContainsRect(rect, elRect) : rectsIntersect(rect, elRect)) {
       hits.push(el.id);
     }
   }
   return hits;
+}
+
+export function rotationHandlePosition(el, distanceFromTop = 26) {
+  const rect = rectOf(el);
+  const top = { x: rect.x + rect.width / 2, y: rect.y - distanceFromTop };
+  return el.angle ? rotatePoint(top, rectCenter(rect), el.angle) : top;
+}
+
+/** Degrees to rotate an element so its top edge points at the cursor. */
+export function angleFromPoints(center, from, to) {
+  const a = Math.atan2(from.y - center.y, from.x - center.x);
+  const b = Math.atan2(to.y - center.y, to.x - center.x);
+  return normalizeAngle(((b - a) * 180) / Math.PI);
 }
 
 /** Ids whose resolved stroke crosses the segment a→b (eraser). */
