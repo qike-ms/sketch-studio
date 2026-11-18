@@ -132,8 +132,19 @@ export function createPersistence(options = {}) {
       });
       return null;
     }
-    const result = validateScene(data);
-    if (!result.ok) {
+    const result = (() => {
+      try {
+        return validateScene(data);
+      } catch (error) {
+        issues.push({
+          code: 'validation-error',
+          message: `${source} could not be validated: ${error?.message ?? error}`,
+          severity: 'error',
+        });
+        return { ok: false, scene: null, issues: [], stats: { total: 0, kept: 0, dropped: 0, repaired: 0 } };
+      }
+    })();
+    if (!result.ok || (result.stats.total > 0 && result.stats.kept === 0)) {
       issues.push({
         code: 'invalid-scene',
         message: `${source} did not contain a usable scene`,

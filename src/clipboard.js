@@ -34,7 +34,12 @@ export function parseClipboardPayload(text) {
   }
   if (!data || typeof data !== 'object') return null;
   if (data.type !== CLIPBOARD_TYPE && !Array.isArray(data.elements)) return null;
-  const result = validateScene({ version: data.version, elements: data.elements });
+  let result;
+  try {
+    result = validateScene({ version: data.version, elements: data.elements });
+  } catch {
+    return null;
+  }
   if (!result.ok || !result.scene.elements.length) return null;
   return { elements: result.scene.elements, issues: result.issues, stats: result.stats };
 }

@@ -38,6 +38,18 @@ export const DEFAULT_LIMITS = Object.freeze({
   maxIdLength: 128,
 });
 
+/** Format an arbitrary JSON value for an issue message without coercing it. */
+export function safeText(value, maxLength = 40) {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  const type = typeof value;
+  if (type === 'string') return value.slice(0, maxLength);
+  if (type === 'number' || type === 'boolean' || type === 'bigint') return String(value).slice(0, maxLength);
+  if (Array.isArray(value)) return `[array ${value.length}]`;
+  if (type === 'object') return '[object]';
+  return `[${type}]`;
+}
+
 const ELEMENT_KEYS = new Set([
   ...Object.keys(ELEMENT_DEFAULTS),
   'id',
@@ -95,7 +107,7 @@ function coerceEnum(raw, allowed, fallback) {
 function coerceColor(raw, fallback, issues, code) {
   if (raw === undefined || raw === null) return { value: fallback, repaired: false };
   if (isSafeColor(raw)) return { value: raw.trim(), repaired: false };
-  issue(issues, code, `invalid colour ${String(raw).slice(0, 40)} replaced with ${fallback}`);
+  issue(issues, code, `invalid colour ${safeText(raw)} replaced with ${fallback}`);
   return { value: fallback, repaired: true };
 }
 
@@ -179,7 +191,7 @@ export function validateElement(raw, context = {}) {
     return { element: null, issues };
   }
   if (!ELEMENT_TYPES.includes(raw.type)) {
-    issue(issues, 'unknown-type', `unknown element type ${String(raw.type).slice(0, 40)} dropped`, {
+    issue(issues, 'unknown-type', `unknown element type ${safeText(raw.type)} dropped`, {
       index,
       severity: 'error',
     });
@@ -321,16 +333,16 @@ export function migrateScene(input, issues = []) {
     return null;
   }
   const declared = Number.isFinite(data.version) ? data.version : 1;
-  if (declared > SCHEMA_VERSION) {
-    issue(issues, 'newer-schema', `scene version ${declared} is newer than ${SCHEMA_VERSION}; attempting repair`);
-    return { ...data, version: SCHEMA_VERSION };
-  }
-  let version = Math.max(1, Math.floor(declared));
-  let elements = Array.isArray(data.elements) ? data.elements : null;
-  if (!elements) {
+  if (!Array.isArray(data.elements)) {
     issue(issues, 'no-elements', 'scene has no elements array', { severity: 'error' });
     return null;
   }
+  if (declared > SCHEMA_VERSION) {
+    issue(issues, 'newer-schema', `scene version ${declared} is newer than ${SCHEMA_VERSION}; attempting repair`);
+    return { ...data, version: SCHEMA_VERSION, elements: data.elements };
+  }
+  let version = Math.max(1, Math.floor(declared));
+  let elements = data.elements;
   while (version < SCHEMA_VERSION) {
     const migration = MIGRATIONS[version];
     if (!migration) {
@@ -451,15 +463,24 @@ export function validateScene(input, options = {}) {
   let dropped = 0;
   const idFactory = options.idFactory ?? ((n) => `el_repair_${n.toString(36)}`);
   for (let index = 0; index < Math.min(rawElements.length, limits.maxElements); index += 1) {
-    const { element, issues: elementIssues } = validateElement(rawElements[index], {
-      index,
-      limits,
-      idFactory,
-      idSeed: index,
-    });
-    issues.push(...elementIssues);
-    if (element) elements.push(element);
-    else dropped += 1;
+    try {
+      const { element, issues: elementIssues } = validateElement(rawElements[index], {
+        index,
+        limits,
+        idFactory,
+        idSeed: index,
+      });
+      issues.push(...elementIssues);
+      if (element) elements.push(element);
+      else dropped += 1;
+    } catch (error) {
+      issue(issues, 'element-validation-failed', `element ${index} could not be validated and was dropped`, {
+        index,
+        severity: 'error',
+        detail: safeText(error?.message ?? error),
+      });
+      dropped += 1;
+    }
   }
   dedupeIds(elements, issues, idFactory);
   repairReferences(elements, issues);

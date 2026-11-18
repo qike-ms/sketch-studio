@@ -79,7 +79,18 @@ export function parseSceneText(text, options = {}) {
       error: `Could not parse JSON: ${error.message}`,
     };
   }
-  const result = validateScene(data, { limits });
+  let result;
+  try {
+    result = validateScene(data, { limits });
+  } catch (error) {
+    return {
+      ok: false,
+      scene: null,
+      issues,
+      stats: null,
+      error: `The scene could not be validated: ${error?.message ?? error}`,
+    };
+  }
   if (!result.ok) {
     return {
       ok: false,
@@ -87,6 +98,15 @@ export function parseSceneText(text, options = {}) {
       issues: result.issues,
       stats: result.stats,
       error: 'The file does not contain a usable scene.',
+    };
+  }
+  if (result.stats.total > 0 && result.stats.kept === 0) {
+    return {
+      ok: false,
+      scene: null,
+      issues: result.issues,
+      stats: result.stats,
+      error: 'The file contained no usable elements.',
     };
   }
   issues.push(...result.issues);
