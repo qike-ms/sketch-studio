@@ -64,6 +64,7 @@ let conflictPending = false;
 let conflictScene = null;
 let lastPointerScene = null;
 let lastStorageWarning = '';
+let textLimitWarned = false;
 const touchPoints = new Map();
 const reportedRenderErrors = new Set();
 
@@ -828,6 +829,7 @@ canvas.addEventListener('pointerleave', () => { if (gesture?.mode === 'pan') can
 
 function startText(point, hit) {
   scene.pushHistory();
+  textLimitWarned = false;
   if (hit && hit.type === 'text') {
     editing = { id: hit.id, caret: String(hit.text ?? '').length };
     setSelection([hit.id]);
@@ -861,7 +863,16 @@ function startText(point, hit) {
 function typeAtCaret(character) {
   const el = find(editing?.id);
   if (!el) return;
-  const next = textLib.insertText(el.text, editing.caret, character);
+  const next = textLib.insertText(el.text, editing.caret, character, {
+    maxLength: schema.DEFAULT_LIMITS.maxTextLength,
+  });
+  if (next.limited) {
+    if (!textLimitWarned) {
+      textLimitWarned = true;
+      toast(`Text is limited to ${schema.DEFAULT_LIMITS.maxTextLength} characters per element.`, 'warning');
+    }
+    return;
+  }
   el.text = next.text;
   editing.caret = next.caret;
   paint.measureText(el);

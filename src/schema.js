@@ -34,6 +34,7 @@ export const DEFAULT_LIMITS = Object.freeze({
   maxElements: 5000,
   maxPoints: 10000,
   maxTextLength: 10000,
+  maxSceneTextChars: 1000000,
   maxImageChars: 8 * 1024 * 1024,
   maxIdLength: 128,
   maxCoordinate: 1e7,
@@ -121,10 +122,10 @@ function coerceId(raw, fallback, issues, code) {
 
 function coerceString(raw, fallback, maxLength = 10000) {
   if (typeof raw === 'string') {
-    return { value: raw.slice(0, maxLength), repaired: raw.length > maxLength };
+    return { value: raw, repaired: false, overLimit: raw.length > maxLength };
   }
-  if (typeof raw === 'number' && Number.isFinite(raw)) return { value: String(raw), repaired: true };
-  return { value: fallback, repaired: raw !== undefined && raw !== fallback };
+  if (typeof raw === 'number' && Number.isFinite(raw)) return { value: String(raw), repaired: true, overLimit: false };
+  return { value: fallback, repaired: raw !== undefined && raw !== fallback, overLimit: false };
 }
 
 function validatePoints(raw, type, issues, index, limits) {
@@ -317,7 +318,16 @@ export function validateElement(raw, context = {}) {
   if (raw.endBinding && !el.endBinding) issue(issues, 'bad-binding', 'end binding was malformed', { index });
 
   if (el.type === 'text') {
-    el.text = coerceString(raw.text, '', limits.maxTextLength).value;
+    const text = coerceString(raw.text, '', limits.maxTextLength);
+    el.text = text.value;
+    if (text.overLimit) {
+      issue(
+        issues,
+        'text-over-limit',
+        `text kept at ${text.value.length} characters (editor typing limit ${limits.maxTextLength}); no content was removed`,
+        { index, length: text.value.length, limit: limits.maxTextLength },
+      );
+    }
   } else {
     el.text = null;
   }
@@ -492,6 +502,19 @@ export function validateScene(input, options = {}) {
     return { ok: false, scene: null, issues, stats: { total: 0, kept: 0, dropped: 0, repaired: 0 } };
   }
   const rawElements = migrated.elements;
+  let sceneTextChars = 0;
+  for (const raw of rawElements) {
+    if (raw && typeof raw === 'object' && typeof raw.text === 'string') sceneTextChars += raw.text.length;
+  }
+  if (sceneTextChars > limits.maxSceneTextChars) {
+    issue(
+      issues,
+      'scene-text-too-large',
+      `scene contains ${sceneTextChars} text characters; limit is ${limits.maxSceneTextChars}`,
+      { severity: 'error', length: sceneTextChars, limit: limits.maxSceneTextChars },
+    );
+    return { ok: false, scene: null, issues, stats: { total: rawElements.length, kept: 0, dropped: 0, repaired: 0 } };
+  }
   if (rawElements.length > limits.maxElements) {
     issue(issues, 'too-many-elements', `scene truncated to ${limits.maxElements} elements`, {
       severity: 'error',

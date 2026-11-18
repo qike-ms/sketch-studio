@@ -5,10 +5,10 @@ import * as text from '../src/text.js';
 
 describe('caret editing', () => {
   it('inserts text at the caret and advances it', () => {
-    assert.deepEqual(text.insertText('hello', 2, 'XY'), { text: 'heXYllo', caret: 4 });
-    assert.deepEqual(text.insertText('', 0, 'a'), { text: 'a', caret: 1 });
-    assert.deepEqual(text.insertText('abc', 99, '!'), { text: 'abc!', caret: 4 });
-    assert.deepEqual(text.insertText('abc', 1, '\n'), { text: 'a\nbc', caret: 2 });
+    assert.deepEqual(text.insertText('hello', 2, 'XY'), { text: 'heXYllo', caret: 4, limited: false });
+    assert.deepEqual(text.insertText('', 0, 'a'), { text: 'a', caret: 1, limited: false });
+    assert.deepEqual(text.insertText('abc', 99, '!'), { text: 'abc!', caret: 4, limited: false });
+    assert.deepEqual(text.insertText('abc', 1, '\n'), { text: 'a\nbc', caret: 2, limited: false });
   });
 
   it('deletes backwards and forwards without corrupting the caret', () => {

@@ -19,13 +19,18 @@ export function caretLineColumn(text, caret) {
   return { line, column };
 }
 
-export function insertText(text, caret, insert) {
+export function insertText(text, caret, insert, options = {}) {
   const value = String(text ?? '');
   const index = clampCaret(value, caret);
   const addition = String(insert ?? '');
+  const maxLength = options.maxLength;
+  if (Number.isFinite(maxLength) && value.length + addition.length > maxLength) {
+    return { text: value, caret: index, limited: true };
+  }
   return {
     text: value.slice(0, index) + addition + value.slice(index),
     caret: index + addition.length,
+    limited: false,
   };
 }
 
