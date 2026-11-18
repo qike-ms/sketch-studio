@@ -11,7 +11,7 @@ export function uid() {
   return `el_${idCounter.toString(36)}`;
 }
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const ELEMENT_DEFAULTS = Object.freeze({
   type: 'rect',
@@ -33,6 +33,15 @@ export const ELEMENT_DEFAULTS = Object.freeze({
   containerId: null,
   startBinding: null,
   endBinding: null,
+  angle: 0,
+  groupIds: [],
+  locked: false,
+  edgeStyle: 'sharp',
+  fontFamily: 'hand',
+  startArrowhead: 'none',
+  endArrowhead: 'none',
+  elbow: false,
+  imageSrc: null,
 });
 
 export function makeElement(props = {}) {
@@ -43,6 +52,7 @@ export function makeElement(props = {}) {
   if (props.points) el.points = props.points.map((p) => ({ x: p.x, y: p.y }));
   if (props.startBinding) el.startBinding = { ...props.startBinding };
   if (props.endBinding) el.endBinding = { ...props.endBinding };
+  el.groupIds = Array.isArray(props.groupIds) ? [...props.groupIds] : [];
   el.id = props.id || uid();
   return normalizePoints(el);
 }
