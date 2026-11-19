@@ -207,6 +207,16 @@ The `src/` layer has no DOM access, which is what keeps it unit-testable.
 - The browser smoke script covers the listed flows, not touch/pinch, OS
   clipboard permissions, image decoding or real multi-tab timing.
 
+## Known issues
+
+Found by an independent re-review and not yet fixed:
+
+- N01: Combining several pastes can produce a scene that cannot be saved.
+- N02: Saved pen strokes can lose points when reloaded.
+- N03: A stale conflict prompt can discard a later edit.
+- N04: Resizing across the opposite edge jumps.
+- R02: A locked shape's label can still be dragged away.
+
 ## License
 
 MIT (see `LICENSE`). Fonts are referenced by system name only; no font files
